@@ -42,7 +42,16 @@ data class BenchmarkResult(
     val abiName: String,
 
     // --- Timestamp ---
-    val timestampUtcMs: Long
+    val timestampUtcMs: Long,
+
+    // --- v0.x additions (appended to preserve CSV column order) ---
+    // What the per-inference timer covers. END_TO_END includes the runtime's
+    // natural output handling; KERNEL is the bare compute call (see BenchmarkEngine).
+    val latencyMode: LatencyMode = LatencyMode.END_TO_END,
+    // PSS snapshots at phase boundaries (peakMemoryMb is the max during measured loop)
+    val memAfterLoadMb: Double = 0.0,
+    val memAfterWarmupMb: Double = 0.0,
+    val memAfterMeasuredMb: Double = 0.0
 ) {
     /**
      * Serialize to CSV row. Column order matches [CsvExporter.HEADER].
@@ -70,7 +79,11 @@ data class BenchmarkResult(
         deviceChip,
         androidVersion,
         androidBuildId,
-        abiName
+        abiName,
+        latencyMode.label,
+        memAfterLoadMb,
+        memAfterWarmupMb,
+        memAfterMeasuredMb
     ).joinToString(",")
 }
 
@@ -95,6 +108,22 @@ enum class Precision(val label: String) {
     FP16("FP16"),
     INT8("INT8"),
     INT4("INT4")
+}
+
+/**
+ * What the per-inference latency timer covers.
+ *
+ *  - END_TO_END: the inference call as the runtime's app-level API naturally
+ *    performs it, including output materialization. This is what an app actually
+ *    pays per call, but it includes per-runtime wrapper overhead (e.g. ONNX/
+ *    ExecuTorch allocate an output object per call; LiteRT writes into a reused
+ *    buffer), so cross-runtime gaps partly reflect API overhead, not just kernels.
+ *  - KERNEL: the bare compute call with I/O already bound, isolating raw kernel
+ *    time for a fairer compute comparison.
+ */
+enum class LatencyMode(val label: String) {
+    END_TO_END("end_to_end"),
+    KERNEL("kernel")
 }
 
 /**

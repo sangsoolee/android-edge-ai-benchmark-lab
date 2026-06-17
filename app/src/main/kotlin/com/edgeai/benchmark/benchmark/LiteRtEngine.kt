@@ -62,6 +62,10 @@ class LiteRtEngine(
         outputBuffer = ByteBuffer.allocateDirect(interp.getOutputTensor(0).numBytes())
             .order(ByteOrder.nativeOrder())
 
+        // Fill with deterministic non-zero values so we don't benchmark an all-zero
+        // input (avoids any zero-skipping fast paths and matches the other engines).
+        fillInputDeterministic()
+
         // First inference included in cold-start measurement
         runInference()
 
@@ -89,6 +93,28 @@ class LiteRtEngine(
     }
 
     // ------------------------------------------------------------------
+
+    /**
+     * Fill [inputBuffer] with a fixed-seed pseudo-random pattern, matching the
+     * model's input dtype (FP32 → floats in [0,1); UINT8/INT8 → raw bytes).
+     * Same seed every run → identical input across runs.
+     */
+    private fun fillInputDeterministic() {
+        val buf = inputBuffer ?: return
+        val rng = java.util.Random(42L)
+        buf.rewind()
+        when (interpreter!!.getInputTensor(0).dataType()) {
+            org.tensorflow.lite.DataType.FLOAT32 -> {
+                repeat(buf.capacity() / 4) { buf.putFloat(rng.nextFloat()) }
+            }
+            else -> {  // UINT8 / INT8 — fill the raw byte pattern (0..255)
+                val bytes = ByteArray(buf.capacity())
+                rng.nextBytes(bytes)
+                buf.put(bytes)
+            }
+        }
+        buf.rewind()
+    }
 
     private fun loadMappedBuffer(path: String): MappedByteBuffer {
         val file = File(path)

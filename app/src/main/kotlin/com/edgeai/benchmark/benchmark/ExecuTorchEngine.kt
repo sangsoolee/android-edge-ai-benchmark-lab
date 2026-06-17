@@ -40,6 +40,11 @@ class ExecuTorchEngine(
     override fun loadModel(modelPath: String, precision: Precision): Double {
         val start = SystemClock.elapsedRealtimeNanos()
         module = Module.load(modelPath)
+
+        // Deterministic non-zero input (fixed seed → identical every run)
+        val rng = java.util.Random(42L)
+        for (i in inputData.indices) inputData[i] = rng.nextFloat()
+
         runInference()   // first inference included in cold-start
         return (SystemClock.elapsedRealtimeNanos() - start) / 1_000_000.0
     }

@@ -44,7 +44,9 @@ object ThermalMonitor {
  */
 class MemoryTracker(
     private val context: Context,
-    private val intervalMs: Long = 50L
+    // Tightened from 50ms: short models (~1.5ms/inference, ~150ms/100 runs) only
+    // gave a few samples at 50ms, so a transient peak could be missed.
+    private val intervalMs: Long = 10L
 ) {
     private var executor: ScheduledExecutorService? = null
     private val peakBytes = AtomicReference(0L)
@@ -71,5 +73,14 @@ class MemoryTracker(
         Debug.getMemoryInfo(info)
         // totalPss is in kB
         return info.totalPss * 1024L
+    }
+
+    companion object {
+        /** One-shot PSS snapshot in MB, for recording at phase boundaries. */
+        fun sampleNowMb(): Double {
+            val info = Debug.MemoryInfo()
+            Debug.getMemoryInfo(info)
+            return info.totalPss * 1024L / (1024.0 * 1024.0)
+        }
     }
 }

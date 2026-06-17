@@ -4,11 +4,11 @@ import android.content.Context
 import android.os.SystemClock
 import com.edgeai.benchmark.model.BenchmarkResult
 import com.edgeai.benchmark.model.Backend
+import com.edgeai.benchmark.model.LatencyMode
 import com.edgeai.benchmark.model.Precision
 import com.edgeai.benchmark.model.Runtime
 import com.edgeai.benchmark.util.MemoryTracker
 import com.edgeai.benchmark.util.ThermalMonitor
-import kotlin.math.sqrt
 
 /**
  * Orchestrates a full benchmark run:
@@ -31,10 +31,18 @@ abstract class BenchmarkEngine(protected val context: Context) {
     abstract fun loadModel(modelPath: String, precision: Precision): Double
 
     /**
-     * Execute a single forward pass on a fixed synthetic input.
+     * Execute a single forward pass on a fixed synthetic input, timed the way the
+     * runtime's app-level API naturally works (END_TO_END — includes output handling).
      * @return inference time in milliseconds
      */
     abstract fun runInference(): Double
+
+    /**
+     * Bare compute call with I/O already bound (KERNEL mode). Override per engine
+     * to isolate raw kernel time; the default falls back to [runInference] so a
+     * KERNEL run is never *slower* than END_TO_END and engines opt in incrementally.
+     */
+    open fun runInferenceKernel(): Double = runInference()
 
     /** Release native resources. */
     abstract fun unloadModel()
@@ -55,15 +63,20 @@ abstract class BenchmarkEngine(protected val context: Context) {
         modelName: String,
         precision: Precision,
         warmupRuns: Int = 20,
-        measuredRuns: Int = 100
+        measuredRuns: Int = 100,
+        latencyMode: LatencyMode = LatencyMode.END_TO_END
     ): BenchmarkResult {
         val thermalBefore = ThermalMonitor.currentStatus(context)
 
         // 1. Cold start (load + first inference)
         val coldStartMs = loadModel(modelPath, precision)
+        val memAfterLoadMb = MemoryTracker.sampleNowMb()
 
         // 2. Warm-up (discard results)
-        repeat(warmupRuns) { runInference() }
+        val inferenceFn: () -> Double =
+            if (latencyMode == LatencyMode.KERNEL) ::runInferenceKernel else ::runInference
+        repeat(warmupRuns) { inferenceFn() }
+        val memAfterWarmupMb = MemoryTracker.sampleNowMb()
 
         // 3. Measure
         val memoryTracker = MemoryTracker(context)
@@ -71,10 +84,11 @@ abstract class BenchmarkEngine(protected val context: Context) {
 
         val latencies = DoubleArray(measuredRuns)
         repeat(measuredRuns) { i ->
-            latencies[i] = runInference()
+            latencies[i] = inferenceFn()
         }
 
         val peakMemoryMb = memoryTracker.stopAndGetPeakMb()
+        val memAfterMeasuredMb = MemoryTracker.sampleNowMb()
         val thermalAfter = ThermalMonitor.currentStatus(context)
 
         unloadModel()
@@ -105,7 +119,11 @@ abstract class BenchmarkEngine(protected val context: Context) {
             androidVersion  = android.os.Build.VERSION.SDK_INT,
             androidBuildId  = android.os.Build.ID,
             abiName         = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown",
-            timestampUtcMs  = System.currentTimeMillis()
+            timestampUtcMs  = System.currentTimeMillis(),
+            latencyMode       = latencyMode,
+            memAfterLoadMb    = memAfterLoadMb,
+            memAfterWarmupMb  = memAfterWarmupMb,
+            memAfterMeasuredMb = memAfterMeasuredMb
         )
     }
 

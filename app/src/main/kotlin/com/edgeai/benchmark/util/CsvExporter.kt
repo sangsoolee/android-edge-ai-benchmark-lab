@@ -24,7 +24,9 @@ object CsvExporter {
         "peak_memory_mb",
         "thermal_before", "thermal_after",
         "device_model", "device_chip", "android_version",
-        "android_build_id", "abi"
+        "android_build_id", "abi",
+        "latency_mode",
+        "mem_after_load_mb", "mem_after_warmup_mb", "mem_after_measured_mb"
     ).joinToString(",")
 
     /**
