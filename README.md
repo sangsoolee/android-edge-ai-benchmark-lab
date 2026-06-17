@@ -72,6 +72,22 @@
 
 > ⚠️ Latency only — **YOLOv8n INT8 detection accuracy (mAP) is not yet verified.** After the MobileNetV3 INT8 collapse, a *fast* INT8 model is not automatically a *correct* one; mAP validation is future work.
 
+### YOLOv8n — Detection postprocess (Python ↔ Android parity)
+
+The full detection pipeline (letterbox → inference → decode → class-aware NMS) runs on-device and is verified against the Python reference on the same image:
+
+<p align="center">
+  <img src="docs/yolov8n_detection_sample.png" width="360" alt="YOLOv8n detections on the bus sample (on-device)"/>
+</p>
+
+| | Python (reference) | Android (on-device) |
+|---|---|---|
+| detections | 4 person + 1 bus | 4 person + 1 bus |
+| score Δ | — | ≤ 0.006 |
+| box Δ | — | ≤ ~4 px (bus ~10 px, 1.3%) |
+
+Identical class IDs, count, and order; the sub-percent box differences trace to the bilinear-resize implementation (Android `createScaledBitmap` vs PIL), not the postprocess logic. Reproduce: [`scripts/eval/yolo_detect_reference.py`](scripts/eval/yolo_detect_reference.py) (Python) and the app's **Detect Sample** button (Android).
+
 ---
 
 ## What This Project Is
@@ -269,7 +285,7 @@ android-edge-ai-benchmark-lab/
 - [ ] **v0.5** — YOLOv8n object detection (preprocess / inference / postprocess split)
   - [x] v0.5.0 — Python export (ONNX + TFLite) & cross-runtime correctness (class-score cosine 1.000)
   - [x] v0.5.1 — Android LiteRT inference: FP32 87.9 ms vs INT8 27.0 ms (INT8 3.3× faster on this heavy model)
-  - [ ] v0.5.2 — Android postprocess / NMS + sample visualization
+  - [x] v0.5.2 — Android postprocess / NMS + sample visualization (Python↔Android parity: same detections, score Δ ≤ 0.006)
   - [ ] v0.5.3 — Android 3-phase benchmark + results table
 - [ ] **v1.0** — Multi-device matrix, technical blog series
 
