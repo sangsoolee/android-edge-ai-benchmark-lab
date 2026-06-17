@@ -52,7 +52,11 @@ class MainActivity : AppCompatActivity() {
     // Must match SUPPORTED_MODELS in scripts/convert/export_*.py.
     private val modelFileNames = listOf(
         "mobilenet_v3_small",
-        "efficientnet_b0"
+        "efficientnet_b0",
+        // v0.5: YOLOv8n detection. LiteRtEngine reads I/O sizes from the model, so
+        // inference latency works without code changes. NOTE: ONNX/ExecuTorch engines
+        // still hard-code a 224x224 input — use LiteRT for YOLOv8n until v0.5.x.
+        "yolov8n"
     )
 
     // File extension per runtime

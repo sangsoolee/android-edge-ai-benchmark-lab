@@ -30,6 +30,7 @@
     <string-array name="model_options">
         <item>MobileNetV3-Small</item>
         <item>EfficientNet-B0</item>
+        <item>YOLOv8n</item>
     </string-array>
 
     <!-- Backend options (LiteRT supports GPU delegate; ONNX/ExecuTorch are CPU-only) -->
