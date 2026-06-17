@@ -28,13 +28,21 @@ import com.edgeai.benchmark.benchmark.ExecuTorchEngine
 import com.edgeai.benchmark.benchmark.LiteRtEngine
 import com.edgeai.benchmark.benchmark.OnnxEngine
 import com.edgeai.benchmark.detection.Detection
+import com.edgeai.benchmark.detection.DetectionBenchmarkResult
+import com.edgeai.benchmark.detection.DetectionCsvExporter
 import com.edgeai.benchmark.detection.DetectionJsonWriter
 import com.edgeai.benchmark.detection.DetectionRenderer
+import com.edgeai.benchmark.detection.Percentiles
 import com.edgeai.benchmark.detection.YoloDetector
+import com.edgeai.benchmark.detection.YoloOutputDecoder
+import com.edgeai.benchmark.detection.Nms
 import com.edgeai.benchmark.model.Backend
 import com.edgeai.benchmark.model.BenchmarkResult
 import com.edgeai.benchmark.model.Precision
+import com.edgeai.benchmark.model.Runtime
 import com.edgeai.benchmark.util.CsvExporter
+import com.edgeai.benchmark.util.MemoryTracker
+import com.edgeai.benchmark.util.ThermalMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,6 +57,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var spinnerPrecision: Spinner
     private lateinit var btnRun: Button
     private lateinit var btnDetect: Button
+    private lateinit var btnDetectBench: Button
     private lateinit var tvStatus: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var ivDetection: ImageView
@@ -86,6 +95,7 @@ class MainActivity : AppCompatActivity() {
 
         btnRun.setOnClickListener { startBenchmark() }
         btnDetect.setOnClickListener { startDetection() }
+        btnDetectBench.setOnClickListener { startDetectionBenchmark() }
     }
 
     /**
@@ -119,6 +129,7 @@ class MainActivity : AppCompatActivity() {
         spinnerPrecision = findViewById(R.id.spinnerPrecision)
         btnRun = findViewById(R.id.btnRun)
         btnDetect = findViewById(R.id.btnDetect)
+        btnDetectBench = findViewById(R.id.btnDetectBench)
         tvStatus = findViewById(R.id.tvStatus)
         progressBar = findViewById(R.id.progressBar)
         ivDetection = findViewById(R.id.ivDetection)
@@ -253,9 +264,113 @@ class MainActivity : AppCompatActivity() {
         FileOutputStream(file).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
+    // ---------------------------------------------------------------------------
+    // Detection 3-phase benchmark (v0.5.3): YOLOv8n LiteRT, FP32 + INT8.
+    // Phases: preprocess / inference / postprocess + end-to-end (own outer timer).
+    // No rendering in the loop. Writes a dedicated detection CSV.
+    // ---------------------------------------------------------------------------
+
+    private fun startDetectionBenchmark(warmup: Int = 20, measured: Int = 100) {
+        if (!sampleImage.exists()) {
+            tvStatus.text = getString(R.string.status_no_sample)
+            return
+        }
+        setRunning(true)
+        tvStatus.text = getString(R.string.status_detect_bench)
+
+        lifecycleScope.launch {
+            val results = withContext(Dispatchers.Default) {
+                runCatching {
+                    val src = BitmapFactory.decodeFile(sampleImage.absolutePath)
+                        ?: error("Could not decode ${sampleImage.name}")
+                    val out = ArrayList<DetectionBenchmarkResult>()
+                    for ((precision, suffix) in listOf(Precision.FP32 to "fp32", Precision.INT8 to "int8")) {
+                        val modelFile = File(modelsDir, "yolov8n_$suffix.tflite")
+                        if (modelFile.exists()) {
+                            out.add(benchmarkDetection(src, modelFile, precision, warmup, measured))
+                        }
+                    }
+                    out
+                }
+            }
+
+            results.onSuccess { list ->
+                if (list.isEmpty()) {
+                    tvStatus.text = "No yolov8n_*.tflite models found in ${modelsDir.name}/"
+                } else {
+                    val file = list.fold<DetectionBenchmarkResult, File?>(null) { _, r ->
+                        DetectionCsvExporter.append(this@MainActivity, r)
+                    }
+                    val summary = list.joinToString("  |  ") {
+                        "${it.precision.label}: e2e ${"%.1f".format(it.endToEndP50)}ms " +
+                        "(pre ${"%.1f".format(it.preprocessP50)} / inf ${"%.1f".format(it.inferenceP50)} / post ${"%.1f".format(it.postprocessP50)})"
+                    }
+                    tvStatus.text = summary
+                    Toast.makeText(this@MainActivity, "Saved ${file?.name}", Toast.LENGTH_SHORT).show()
+                }
+            }.onFailure { e ->
+                Log.e("MainActivity", "Detection benchmark failed", e)
+                tvStatus.text = getString(R.string.status_error, e.message)
+            }
+
+            setRunning(false)
+        }
+    }
+
+    private fun benchmarkDetection(
+        src: Bitmap, modelFile: File, precision: Precision, warmup: Int, measured: Int
+    ): DetectionBenchmarkResult {
+        val thermalBefore = ThermalMonitor.currentStatus(this)
+        val detector = YoloDetector(modelFile.absolutePath)
+        try {
+            repeat(warmup) { detector.detectTimed(src) }
+
+            val memBefore = MemoryTracker.sampleNowMb()
+            val pre = DoubleArray(measured); val inf = DoubleArray(measured)
+            val post = DoubleArray(measured); val e2e = DoubleArray(measured)
+            val counts = IntArray(measured)
+
+            val tracker = MemoryTracker(this)
+            tracker.start()
+            for (i in 0 until measured) {
+                val t = detector.detectTimed(src)
+                pre[i] = t.preprocessMs; inf[i] = t.inferenceMs
+                post[i] = t.postprocessMs; e2e[i] = t.endToEndMs; counts[i] = t.detectionCount
+            }
+            val memPeak = tracker.stopAndGetPeakMb()
+            val memAfter = MemoryTracker.sampleNowMb()
+            val thermalAfter = ThermalMonitor.currentStatus(this)
+
+            val sortedCounts = counts.sortedArray()
+            val countP50 = sortedCounts[((sortedCounts.size - 1) / 2)]
+
+            return DetectionBenchmarkResult(
+                timestampUtcMs = System.currentTimeMillis(),
+                modelName = "YOLOv8n", runtime = Runtime.LITERT, backend = Backend.CPU,
+                precision = precision, inputWidth = 640, inputHeight = 640,
+                warmupRuns = warmup, measuredRuns = measured,
+                preprocessP50 = Percentiles.of(pre, 50.0), preprocessP90 = Percentiles.of(pre, 90.0), preprocessP99 = Percentiles.of(pre, 99.0),
+                inferenceP50 = Percentiles.of(inf, 50.0), inferenceP90 = Percentiles.of(inf, 90.0), inferenceP99 = Percentiles.of(inf, 99.0),
+                postprocessP50 = Percentiles.of(post, 50.0), postprocessP90 = Percentiles.of(post, 90.0), postprocessP99 = Percentiles.of(post, 99.0),
+                endToEndP50 = Percentiles.of(e2e, 50.0), endToEndP90 = Percentiles.of(e2e, 90.0), endToEndP99 = Percentiles.of(e2e, 99.0),
+                detectionCountP50 = countP50,
+                confThreshold = YoloOutputDecoder.CONF_THRES, iouThreshold = Nms.IOU_THRES, maxDetections = Nms.MAX_DET,
+                modelSizeMb = modelFile.length() / (1024.0 * 1024.0),
+                memBeforeMb = memBefore, memPeakMb = memPeak, memAfterMb = memAfter,
+                thermalBefore = thermalBefore, thermalAfter = thermalAfter,
+                deviceModel = Build.MODEL, deviceChip = Build.HARDWARE,
+                androidVersion = Build.VERSION.SDK_INT,
+                abiName = Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
+            )
+        } finally {
+            detector.close()
+        }
+    }
+
     private fun setRunning(running: Boolean) {
         btnRun.isEnabled = !running
         btnDetect.isEnabled = !running
+        btnDetectBench.isEnabled = !running
         progressBar.visibility = if (running) View.VISIBLE else View.GONE
         if (running) tvStatus.text = getString(R.string.status_running)
     }
