@@ -56,9 +56,10 @@
         <item>NNAPI</item>
     </string-array>
 
-    <!-- Precision options -->
+    <!-- Precision options (index order must match MainActivity precision mapping) -->
     <string-array name="precision_options">
         <item>FP32</item>
+        <item>FP16</item>
         <item>INT8</item>
     </string-array>
 </resources>

@@ -148,8 +148,10 @@ class MainActivity : AppCompatActivity() {
         val modelFileName = modelFileNames[modelIndex]
         val modelName = spinnerModel.selectedItem.toString()
 
+        // Index order must match precision_options: FP32(0), FP16(1), INT8(2).
         val precision = when (spinnerPrecision.selectedItemPosition) {
-            1 -> Precision.INT8
+            1 -> Precision.FP16
+            2 -> Precision.INT8
             else -> Precision.FP32
         }
 
@@ -161,7 +163,8 @@ class MainActivity : AppCompatActivity() {
             else -> Backend.CPU                                                // ExecuTorch
         }
 
-        val precisionSuffix = if (precision == Precision.INT8) "int8" else "fp32"
+        // fp32 / fp16 / int8 — matches export_tflite.py output naming
+        val precisionSuffix = precision.label.lowercase()
         val ext = runtimeExtensions[runtimeIndex]
         val modelPath = File(modelsDir, "${modelFileName}_${precisionSuffix}.$ext").absolutePath
 
