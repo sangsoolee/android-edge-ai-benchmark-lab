@@ -1,0 +1,11 @@
+{
+  "model": "mobilenet_v3_small_int8.tflite",
+  "precision": "int8",
+  "top1_accuracy": 0.006,
+  "top5_accuracy": 0.016,
+  "top1_correct": 3,
+  "top5_correct": 8,
+  "sample_count": 500,
+  "errors": 0,
+  "elapsed_sec": 3.98
+}

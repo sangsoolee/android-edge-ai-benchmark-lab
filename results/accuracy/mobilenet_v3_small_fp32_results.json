@@ -1,0 +1,11 @@
+{
+  "model": "mobilenet_v3_small_fp32.tflite",
+  "precision": "fp32",
+  "top1_accuracy": 0.694,
+  "top5_accuracy": 0.886,
+  "top1_correct": 347,
+  "top5_correct": 443,
+  "sample_count": 500,
+  "errors": 0,
+  "elapsed_sec": 2.78
+}

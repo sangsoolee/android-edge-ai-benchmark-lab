@@ -1,0 +1,3 @@
+model,precision,top1_pct,top5_pct,top1_correct,top5_correct,sample_count,elapsed_sec,top1_drop_pct_point,top5_drop_pct_point
+mobilenet_v3_small_fp32.tflite,fp32,69.4,88.6,347,443,500,2.78,,
+mobilenet_v3_small_int8.tflite,int8,0.6,1.6,3,8,500,3.98,68.8,87.0
