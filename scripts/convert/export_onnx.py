@@ -31,6 +31,7 @@ import torchvision.models as tv_models
 SUPPORTED_MODELS = {
     "mobilenet_v3_small": lambda: tv_models.mobilenet_v3_small(weights="IMAGENET1K_V1"),
     "mobilenet_v3_large": lambda: tv_models.mobilenet_v3_large(weights="IMAGENET1K_V1"),
+    "mobilenet_v2":       lambda: tv_models.mobilenet_v2(weights="IMAGENET1K_V1"),
     "efficientnet_b0":    lambda: tv_models.efficientnet_b0(weights="IMAGENET1K_V1"),
 }
 

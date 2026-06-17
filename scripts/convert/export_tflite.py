@@ -16,16 +16,24 @@ Usage:
   python export_tflite.py --model mobilenet_v3_small --precision fp32
   python export_tflite.py --model mobilenet_v3_small --precision int8 --calib-samples 200
 
+  # INT8 with real ImageNet calibration data (recommended — avoids quantization bias)
+  python export_tflite.py --model mobilenet_v3_small --precision int8 \\
+    --representative-data /path/to/imagenet/val \\
+    --representative-samples 500
+
 Output:
   ../../models/<model>_<precision>.tflite
 """
 
 import argparse
+import glob
+import random
 import shutil
 import numpy as np
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 import torch
 import torchvision.models as tv_models
@@ -38,6 +46,10 @@ import tensorflow as tf
 SUPPORTED_MODELS = {
     "mobilenet_v3_small": lambda: tv_models.mobilenet_v3_small(weights="IMAGENET1K_V1"),
     "mobilenet_v3_large": lambda: tv_models.mobilenet_v3_large(weights="IMAGENET1K_V1"),
+    # MobileNetV2: ReLU6 activations (no hard-swish/SE) → quantizes cleanly under
+    # full-integer PTQ, unlike MobileNetV3 which collapses. Used for the v0.4
+    # FP32-vs-INT8 accuracy comparison.
+    "mobilenet_v2":       lambda: tv_models.mobilenet_v2(weights="IMAGENET1K_V1"),
     "efficientnet_b0":    lambda: tv_models.efficientnet_b0(weights="IMAGENET1K_V1"),
 }
 
@@ -107,11 +119,61 @@ def to_tflite_fp16(saved_model_dir: Path, output_path: Path) -> None:
     print(f"  [TFLite FP16] saved → {output_path}")
 
 
-def to_tflite_int8(saved_model_dir: Path, output_path: Path, calib_samples: int) -> None:
-    def representative_dataset():
-        # NHWC layout expected by TFLiteConverter
-        for _ in range(calib_samples):
-            yield [np.random.randn(1, 224, 224, 3).astype(np.float32)]
+def _preprocess_image(image_path: str) -> np.ndarray:
+    """Load one image → float32 NHWC (1, 224, 224, 3), torchvision-normalized."""
+    from PIL import Image
+    img = Image.open(image_path).convert("RGB")
+    w, h = img.size
+    scale = 256 / min(w, h)
+    img = img.resize((int(round(w * scale)), int(round(h * scale))), Image.BILINEAR)
+    w, h = img.size
+    left, top = (w - 224) // 2, (h - 224) // 2
+    img = img.crop((left, top, left + 224, top + 224))
+    arr = np.array(img, dtype=np.float32) / 255.0
+    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+    std  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+    return ((arr - mean) / std)[np.newaxis]   # (1, 224, 224, 3)
+
+
+def _make_real_dataset(data_dir: str, n_samples: int):
+    """Calibration generator using real ImageNet validation images."""
+    patterns = [f"{data_dir}/**/*.JPEG", f"{data_dir}/**/*.jpg", f"{data_dir}/**/*.jpeg"]
+    files = []
+    for pat in patterns:
+        files.extend(glob.glob(pat, recursive=True))
+    if not files:
+        raise ValueError(f"No images found in {data_dir}. Provide --representative-data correctly.")
+    random.shuffle(files)
+    chosen = files[:n_samples]
+    print(f"  Found {len(files)} images, using {len(chosen)} for calibration")
+
+    def generator():
+        for path in chosen:
+            try:
+                yield [_preprocess_image(path)]
+            except Exception:
+                pass  # skip unreadable images
+
+    return generator
+
+
+def to_tflite_int8(
+    saved_model_dir: Path,
+    output_path: Path,
+    calib_samples: int,
+    representative_data_dir: Optional[str] = None,
+) -> None:
+    if representative_data_dir:
+        representative_dataset = _make_real_dataset(representative_data_dir, calib_samples)
+        print(f"  Using real ImageNet images from: {representative_data_dir}")
+    else:
+        def representative_dataset():
+            # NHWC layout expected by TFLiteConverter; random noise approximates
+            # normalized distribution but real images give better calibration
+            for _ in range(calib_samples):
+                yield [np.random.randn(1, 224, 224, 3).astype(np.float32)]
+        print(f"  Using random noise calibration ({calib_samples} samples)")
+        print("  Tip: pass --representative-data for better accuracy on real images")
 
     converter = tf.lite.TFLiteConverter.from_saved_model(str(saved_model_dir))
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
@@ -129,11 +191,20 @@ def to_tflite_int8(saved_model_dir: Path, output_path: Path, calib_samples: int)
 
 def main():
     parser = argparse.ArgumentParser(description="Export PyTorch model → TFLite")
-    parser.add_argument("--model",         required=True, choices=SUPPORTED_MODELS)
-    parser.add_argument("--precision",     required=True, choices=["fp32", "fp16", "int8"])
+    parser.add_argument("--model",     required=True, choices=SUPPORTED_MODELS)
+    parser.add_argument("--precision", required=True, choices=["fp32", "fp16", "int8"])
     parser.add_argument("--calib-samples", type=int, default=100,
                         help="Calibration samples for INT8 quantization (default: 100)")
+    parser.add_argument("--representative-data", type=str, default=None,
+                        help="Directory of real ImageNet val images for INT8 calibration "
+                             "(recommended over random noise). Supports flat or nested JPEG trees.")
+    parser.add_argument("--representative-samples", type=int, default=500,
+                        help="How many images to use from --representative-data (default: 500)")
     args = parser.parse_args()
+
+    # --representative-samples overrides --calib-samples when real data is provided
+    if args.representative_data:
+        args.calib_samples = args.representative_samples
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -165,7 +236,8 @@ def main():
     elif args.precision == "fp16":
         to_tflite_fp16(saved_model_dir, out_path)
     elif args.precision == "int8":
-        to_tflite_int8(saved_model_dir, out_path, args.calib_samples)
+        to_tflite_int8(saved_model_dir, out_path, args.calib_samples,
+                       representative_data_dir=args.representative_data)
 
     # Cleanup intermediate files
     onnx_path.unlink(missing_ok=True)
