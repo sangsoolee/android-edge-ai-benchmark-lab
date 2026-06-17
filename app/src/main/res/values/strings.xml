@@ -23,6 +23,7 @@
     <string-array name="runtime_options">
         <item>LiteRT (TFLite)</item>
         <item>ONNX Runtime</item>
+        <item>ExecuTorch</item>
     </string-array>
 
     <!-- Model options -->

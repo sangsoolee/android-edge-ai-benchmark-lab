@@ -11,8 +11,8 @@ android {
         applicationId = "com.edgeai.benchmark"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
 
         ndk {
             abiFilters += "arm64-v8a"
@@ -64,6 +64,9 @@ dependencies {
 
     // ONNX Runtime
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.3")
+
+    // ExecuTorch 1.3.1 — Maven Central
+    implementation("org.pytorch:executorch-android:1.3.1")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

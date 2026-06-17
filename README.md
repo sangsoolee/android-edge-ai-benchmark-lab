@@ -26,17 +26,19 @@
 | LiteRT | CPU (XNNPACK) | INT8 | 2.76 MB | 2.86 ms | 3.06 ms | 3.08 ms | 15.5 ms | 100.0 MB |
 | LiteRT | GPU delegate | FP32 | 9.73 MB | 2.83 ms | 3.11 ms | 3.26 ms | 204.8 ms | 163.2 MB |
 | ONNX Runtime | CPU | FP32 | 9.71 MB | 5.41 ms | 5.58 ms | 5.67 ms | 65.9 ms | 132.3 MB |
+| ExecuTorch | CPU (portable) | FP32 | 9.84 MB | 62.6 ms | 63.3 ms | 63.5 ms | 100.9 ms | 114.3 MB |
 
 > Measurement: warmup=20, measured=100 runs · release build · airplane mode · no charging · 5-min cooldown
 
 **Key findings:**
 - 🏆 **LiteRT CPU FP32 wins** — Snapdragon 8 Gen 3 + XNNPACK delivers the best latency across all configurations
 - ⚡ **LiteRT is 3.8× faster than ONNX Runtime** (1.42 ms vs 5.41 ms) — XNNPACK is highly ARM-optimized; ONNX Runtime uses a generic CPU path by default
+- 🐢 **ExecuTorch is 44× slower than LiteRT** (62.6 ms vs 1.42 ms) — default ExecuTorch executor uses a portable reference implementation without XNNPACK backend. Export with XNNPACK partitioner for production use
 - ⚠️ **GPU cold-start = 204 ms** — 9× slower than CPU due to shader compilation. Critical for first-launch UX
 - ⚠️ **INT8 is 2× slower than FP32 on CPU** — dequantize ops cancel out compute savings on this chip
 - 📦 **INT8 is 3.5× smaller on disk** (2.76 MB vs 9.73 MB) — only advantage is storage/download size
 
-*Always benchmark on your target device. "GPU is faster" and "INT8 is faster" are not universal truths.*
+*Always benchmark on your target device. "GPU is faster", "INT8 is faster", "ExecuTorch is fast" are not universal truths.*
 
 ---
 
@@ -52,7 +54,7 @@ Most "on-device AI" articles benchmark on a simulator, use a single average late
 |---|---|---|
 | [LiteRT / TFLite](https://ai.google.dev/edge/litert) 2.x | ✅ v0.1 | CPU (XNNPACK), GPU delegate |
 | [ONNX Runtime Android](https://onnxruntime.ai) 1.x | ✅ v0.2 | CPU |
-| [ExecuTorch](https://pytorch.org/executorch) | 🔜 v0.3 | CPU, XNNPACK |
+| [ExecuTorch](https://pytorch.org/executorch) 1.x | ✅ v0.3 | CPU (portable) |
 
 ---
 
@@ -123,6 +125,7 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 Run the app → select runtime/model/backend/precision → **Run Benchmark**
 
 ```bash
+# Pull results (files land in results/raw/results/)
 adb pull /sdcard/Android/data/com.edgeai.benchmark/files/results/ ./results/raw/
 ```
 
@@ -168,7 +171,7 @@ android-edge-ai-benchmark-lab/
 
 - [x] **v0.1** — LiteRT (CPU + GPU), MobileNetV3-Small, p50/p95/p99, CSV export
 - [x] **v0.2** — ONNX Runtime CPU, LiteRT vs ONNX Runtime comparison (3.8× gap found)
-- [ ] **v0.3** — ExecuTorch
+- [x] **v0.3** — ExecuTorch CPU, 3-runtime comparison (44× gap vs LiteRT found — XNNPACK backend required)
 - [ ] **v0.4** — INT8 accuracy drop analysis (FP32 vs INT8 top-1 accuracy)
 - [ ] **v0.5** — YOLOv8n / YOLOv11n (preprocess / inference / postprocess split)
 - [ ] **v1.0** — Multi-device matrix, technical blog series

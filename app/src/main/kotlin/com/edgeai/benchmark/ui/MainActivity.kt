@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.ProgressBar
@@ -18,6 +19,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.edgeai.benchmark.R
 import com.edgeai.benchmark.benchmark.BenchmarkEngine
+import com.edgeai.benchmark.benchmark.ExecuTorchEngine
 import com.edgeai.benchmark.benchmark.LiteRtEngine
 import com.edgeai.benchmark.benchmark.OnnxEngine
 import com.edgeai.benchmark.model.Backend
@@ -51,7 +53,7 @@ class MainActivity : AppCompatActivity() {
     )
 
     // File extension per runtime
-    private val runtimeExtensions = listOf("tflite", "onnx")
+    private val runtimeExtensions = listOf("tflite", "onnx", "pte")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -114,6 +116,7 @@ class MainActivity : AppCompatActivity() {
                 runCatching {
                     val engine: BenchmarkEngine = when (runtimeIndex) {
                         1 -> OnnxEngine(context = this@MainActivity, backend = backend)
+                        2 -> ExecuTorchEngine(context = this@MainActivity, backend = backend)
                         else -> LiteRtEngine(context = this@MainActivity, backend = backend)
                     }
                     engine.benchmark(
@@ -127,7 +130,6 @@ class MainActivity : AppCompatActivity() {
             result.onSuccess { benchmarkResult ->
                 adapter.addResult(benchmarkResult)
                 saveToCsv(benchmarkResult)
-                tvStatus.text = getString(R.string.status_done)
             }.onFailure { error ->
                 tvStatus.text = getString(R.string.status_error, error.message)
             }
@@ -137,11 +139,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveToCsv(result: BenchmarkResult) {
-        runCatching {
+        try {
             val file = CsvExporter.append(this, result)
-            runOnUiThread {
-                Toast.makeText(this, "Saved: ${file.name}", Toast.LENGTH_SHORT).show()
-            }
+            tvStatus.text = getString(R.string.status_done)
+            Toast.makeText(this, "Saved: ${file.name}", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Log.e("MainActivity", "CSV save failed for ${result.runtime.label}", e)
+            tvStatus.text = "Done. CSV save failed: ${e.javaClass.simpleName}: ${e.message}"
+            Toast.makeText(this, "CSV save failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 

@@ -19,6 +19,11 @@ snc4onnx
 sam4onnx
 soc4onnx
 
+# ExecuTorch export (v0.3) — requires matching torch version
+# Install separately AFTER torch: pip install executorch
+# See: https://pytorch.org/executorch/stable/getting-started-setup.html
+# executorch>=0.4.0
+
 # Quantization
 torchao>=0.3.0        # PyTorch-native quantization (Phase 3+)
 
