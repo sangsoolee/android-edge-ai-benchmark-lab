@@ -46,7 +46,7 @@
 
 A **reproducible benchmarking pipeline** for comparing on-device AI inference runtimes on real Android hardware.
 
-Most "on-device AI" articles benchmark on a simulator, use a single average latency number, or don't disclose measurement conditions. This project measures **p50/p95/p99 latency, cold-start time, peak PSS memory, and thermal status** under fully controlled conditions — and makes all raw CSV data available.
+Most "on-device AI" articles benchmark on a simulator, use a single average latency number, or don't disclose measurement conditions. This project measures **p50/p95/p99 latency, cold-start time, peak PSS memory, and thermal status**, documents the exact measurement protocol, and commits the raw result rows — every benchmark run, including repeat sessions — to [results/raw/](results/raw/). (Each row aggregates one 100-inference run; committing the full per-inference distributions is planned.)
 
 **Runtimes compared:**
 
@@ -60,24 +60,32 @@ Most "on-device AI" articles benchmark on a simulator, use a single average late
 
 ## Reproducibility First
 
-Every result in this repo can be reproduced by anyone with the same device. Measurement conditions are not just documented — they are enforced in code.
+Measurement conditions are documented and **partially recorded in code**. The app automatically controls and captures the warmup/measured loops, cold-start, thermal status, and peak memory. The remaining conditions (airplane mode, brightness, charging, cooldown) are a **manual protocol the experimenter must follow** — they are not enforced by the app.
 
 ```
-Warmup runs:      20 (discarded)
-Measured runs:    100
-Input:            Fixed synthetic tensor, same seed every run
-Build type:       Release (never debug — interpreter overhead is significant)
-ABI:              arm64-v8a only
-Network:          Airplane mode ON
-Screen:           50% brightness, fixed
-Charging:         Cable disconnected
-Cooldown:         5 min idle before each session
+Recorded / enforced in code:
+  Warmup runs:    20 (discarded)
+  Measured runs:  100
+  Input:          Fixed input tensor, identical every run
+  Cold start:     model load + first inference
+  Thermal:        PowerManager status before/after
+  Peak memory:    PSS polling during measured loop
+
+Manual protocol (experimenter-controlled, not enforced):
+  Build type:     Release (never debug — interpreter overhead is significant)
+  ABI:            arm64-v8a only
+  Network:        Airplane mode ON
+  Screen:         50% brightness, fixed
+  Charging:       Cable disconnected
+  Cooldown:       5 min idle before each session
 ```
 
 ### Why p99?
 
 p50 looks great on a chart. p99 is what your users actually experience on a bad thermal day.  
 A runtime with `p50=12ms` but `p99=180ms` is not production-ready.
+
+> **Percentile definition:** computed as floor-index nearest-rank — `sorted[floor(p/100 · (n-1))]`. With `n=100`, p99 maps to index 98 (the 99th of 100 sorted samples), i.e. effectively the near-maximum rather than an interpolated value.
 
 ---
 
@@ -125,8 +133,10 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 Run the app → select runtime/model/backend/precision → **Run Benchmark**
 
 ```bash
-# Pull results (files land in results/raw/results/)
+# Pull results. Note: adb nests them under results/raw/results/ — move the CSV
+# up to results/raw/ (the committed location the analyze scripts expect).
 adb pull /sdcard/Android/data/com.edgeai.benchmark/files/results/ ./results/raw/
+mv ./results/raw/results/*.csv ./results/raw/ 2>/dev/null || true
 ```
 
 ### Step 6 — Analyze
