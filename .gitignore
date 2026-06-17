@@ -14,9 +14,14 @@ __pycache__/
 # Model files (large binaries, push separately)
 models/
 
-# Benchmark results (raw data, not source)
-results/raw/
+# Benchmark results: commit curated top-level CSVs, ignore local pull artifacts
+# (adb pull nests data under results/raw/results/ — that copy stays ignored)
+results/raw/*
+!results/raw/*.csv
 results/graphs/
+
+# ImageNet dataset (large, distribute separately)
+data/
 
 # Android build outputs
 app/build/
