@@ -69,11 +69,14 @@ def _find_imagenet_class_index_json() -> "Path | None":
 # Preprocessing
 # ---------------------------------------------------------------------------
 
-def preprocess(image_path: str) -> np.ndarray:
-    """Load and preprocess one image.
+def preprocess(image_path: str, mode: str = "torchvision") -> np.ndarray:
+    """Load and preprocess one image (resize 256 → center crop 224).
 
-    Matches torchvision IMAGENET1K_V1 weights transform exactly:
-      Resize(256, interpolation=BILINEAR) → CenterCrop(224) → ToTensor → Normalize
+    mode="torchvision": ToTensor + mean/std normalize (matches torchvision
+      IMAGENET1K_V1 weights — the FP32/FP16/PTQ-INT8 torchvision→TFLite models).
+    mode="keras": values stay in RGB [0,255], NO normalization (matches
+      tf.keras.applications.MobileNetV3Small with include_preprocessing=True,
+      i.e. the QAT model — its Rescaling layer is baked in).
 
     Returns float32 NHWC array of shape (1, 224, 224, 3).
     """
@@ -93,8 +96,13 @@ def preprocess(image_path: str) -> np.ndarray:
     top  = (new_h - CROP_SIZE) // 2
     img  = img.crop((left, top, left + CROP_SIZE, top + CROP_SIZE))
 
-    arr = np.array(img, dtype=np.float32) / 255.0           # (224, 224, 3) in [0,1]
-    arr = (arr - IMAGENET_MEAN) / IMAGENET_STD              # normalize
+    arr = np.array(img, dtype=np.float32)                    # (224, 224, 3) in [0,255]
+    if mode == "keras":
+        return arr[np.newaxis]                               # model rescales internally
+    if mode == "mobilenet_v2":
+        return (arr / 127.5 - 1.0)[np.newaxis]               # MobileNetV2 range [-1,1]
+    arr = arr / 255.0                                        # [0,1]
+    arr = (arr - IMAGENET_MEAN) / IMAGENET_STD               # normalize
     return arr[np.newaxis]                                   # (1, 224, 224, 3) NHWC
 
 
@@ -168,6 +176,7 @@ def evaluate(
     model_path: Path,
     manifest: list[dict],
     output_path: Path,
+    preprocess_mode: str = "torchvision",
 ) -> dict:
     try:
         from ai_edge_litert.interpreter import Interpreter, OpResolverType
@@ -216,7 +225,7 @@ def evaluate(
 
     for item in progress(manifest, desc=model_path.stem, unit="img"):
         try:
-            img_nhwc = preprocess(item["image_path"])
+            img_nhwc = preprocess(item["image_path"], preprocess_mode)
         except Exception as e:
             errors += 1
             continue
@@ -281,6 +290,11 @@ def main() -> None:
                         help="val_manifest.csv from prepare_imagenet_val.py")
     parser.add_argument("--limit", type=int, default=None,
                         help="Max images to evaluate (default: all ~50k)")
+    parser.add_argument("--preprocess", choices=["torchvision", "keras", "mobilenet_v2"],
+                        default="torchvision",
+                        help="torchvision = mean/std normalize (torchvision models); "
+                             "keras = RGB [0,255] (Keras include_preprocessing models); "
+                             "mobilenet_v2 = [-1,1] (Keras MobileNetV2 QAT model)")
     parser.add_argument("--output", type=Path, default=None,
                         help="Output JSON path (default: results/accuracy/<model>_results.json)")
     args = parser.parse_args()
@@ -300,7 +314,7 @@ def main() -> None:
     manifest = load_manifest(args.manifest, args.limit)
     print(f"Loaded {len(manifest)} entries from manifest")
 
-    evaluate(args.model, manifest, output_path)
+    evaluate(args.model, manifest, output_path, preprocess_mode=args.preprocess)
     print("\nDone.\n")
 
 

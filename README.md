@@ -37,18 +37,24 @@
 | Runtime | Precision | Quantization | Top-1 | Top-5 | Top-1 Drop | Result |
 |---|---|---|---:|---:|---:|---|
 | LiteRT / TFLite | FP32 | none | **69.4%** | 88.6% | — | ✅ Valid baseline |
+| LiteRT / TFLite | **FP16** | weight fp16 | **69.6%** | 88.6% | **+0.2 pp** | ✅ Safe compression |
 | LiteRT / TFLite | INT8 | full-integer PTQ | **0.6%** | 1.6% | **−68.8 pp** | ❌ Accuracy collapse |
 
-**This is a measured negative finding, not an eval bug.** FP32 reaching 69.4% (vs MobileNetV3-Small's official 67.7%) confirms preprocessing and label mapping are correct; the same manifest, preprocessing, and dtype detection were used for both precisions. *In this setup*, naive full-integer INT8 PTQ collapsed accuracy (Top-5 fell too: 88.6% → 1.6%) while only shrinking the model. See [results/accuracy/README.md](results/accuracy/README.md) for the sanity checks and likely causes.
+**This is a measured negative finding, not an eval bug.** FP32 reaching 69.4% (vs MobileNetV3-Small's official 67.7%) confirms preprocessing and label mapping are correct; the same manifest, preprocessing, and dtype detection were used across precisions. *In this setup*, naive full-integer INT8 PTQ collapsed accuracy (Top-5 fell too: 88.6% → 1.6%) while only shrinking the model. **FP16 is the safe middle option** — it preserves accuracy (no retraining) at ~half the size. See [results/accuracy/README.md](results/accuracy/README.md) for sanity checks, likely causes, and the QAT feasibility study.
 
 **Latency × size × accuracy — the actual decision:**
 
 | Precision | Size | p50 latency | Memory | Top-1 | Decision |
 |---|---:|---:|---:|---:|---|
 | FP32 | 9.73 MB | 1.53 ms | ~100 MB | 69.4% | ✅ Selected |
+| FP16 | 4.89 MB | — | ~100 MB | 69.6% | ✅ Safe compression |
 | INT8 (full-integer) | 2.76 MB | 2.86 ms | ~100 MB | 0.6% | ❌ Rejected |
 
-> INT8 was 3.5× smaller but **slower** (dequantize overhead on this chip) **and** accuracy-collapsed — rejected here despite the size win. **Edge optimization must be measured across latency, memory, size, *and* accuracy together** — size/latency alone can hide a broken model.
+> INT8 was 3.5× smaller but **slower** (dequantize overhead on this chip) **and** accuracy-collapsed — rejected despite the size win. FP16 halves the size with no accuracy loss. **Edge optimization must be measured across latency, memory, size, *and* accuracy together** — size/latency alone can hide a broken model.
+
+**QAT feasibility (v0.4.1b).** Can Quantization-Aware Training recover the collapsed INT8? Two findings: (1) TFMOT's `quantize_model` **does not support MobileNetV3** (custom hard-swish / SE) — so MobileNetV3 is hostile to quantization at *both* the PTQ and QAT-tooling levels. (2) On a quantization-friendly arch (Keras MobileNetV2, FP32 sanity 72.6%), the QAT toolchain runs end-to-end and produces a **non-collapsed** INT8, but a 500-image / 1-epoch PoC only reached **16.6% Top-1** — far short of recovery.
+
+> ⚠️ The QAT PoC used the **same 500 images for fine-tune and eval** (no train/eval split), so 16.6% is an optimistic upper bound — and it was still low, confirming the PoC training budget was insufficient. This is a **toolchain-feasibility check, not an apples-to-apples recovery** of the MobileNetV3 baseline (different architecture/weights). **Conclusion: FP16 is the practical recovery path here; proper QAT needs a real train/eval split + training budget → future work.**
 
 **Key findings:**
 - 🏆 **LiteRT CPU FP32 is fastest (1.53 ms)** — Snapdragon 8 Gen 3 + XNNPACK. All three runtimes produce identical outputs (cosine ≈ 1.000, same top-1), so the gaps are pure runtime/backend efficiency — not divergent conversions.
@@ -299,7 +305,7 @@ android-edge-ai-benchmark-lab/
 - [x] **v0.2** — ONNX Runtime CPU, LiteRT vs ONNX Runtime comparison (3.8× gap found)
 - [x] **v0.3** — ExecuTorch CPU, 3-runtime comparison (44× gap vs LiteRT found — XNNPACK backend required)
 - [x] **v0.4** — ImageNet accuracy validation: FP32 69.4% baseline vs **full-integer INT8 PTQ collapse (0.6%)** — measured negative finding
-- [ ] **v0.4.1** — FP16 (intermediate compression) + QAT recovery experiment
+- [x] **v0.4.1** — FP16 safe middle option (69.6%, ½ size) + QAT feasibility (TFMOT ✗ MobileNetV3; MobileNetV2 QAT PoC under-recovered → future work)
 - [x] **v0.5** — YOLOv8n object detection (preprocess / inference / postprocess split)
   - [x] v0.5.0 — Python export (ONNX + TFLite) & cross-runtime correctness (class-score cosine 1.000)
   - [x] v0.5.1 — Android LiteRT inference: FP32 87.9 ms vs INT8 27.0 ms (INT8 3.3× faster on this heavy model)

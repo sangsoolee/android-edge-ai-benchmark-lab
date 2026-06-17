@@ -1,0 +1,11 @@
+{
+  "model": "mobilenet_v2_keras_fp32.tflite",
+  "precision": "fp32",
+  "top1_accuracy": 0.726,
+  "top5_accuracy": 0.906,
+  "top1_correct": 363,
+  "top5_correct": 453,
+  "sample_count": 500,
+  "errors": 0,
+  "elapsed_sec": 6.1
+}

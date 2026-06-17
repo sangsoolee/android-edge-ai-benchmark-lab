@@ -26,6 +26,7 @@ soc4onnx
 
 # Quantization
 torchao>=0.3.0        # PyTorch-native quantization (Phase 3+)
+tensorflow-model-optimization>=0.7.5   # QAT recovery experiment (v0.4.1b)
 
 # Object detection (v0.5) — YOLOv8n export to ONNX / TFLite
 ultralytics>=8.2.0
