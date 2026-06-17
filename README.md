@@ -88,6 +88,24 @@ The full detection pipeline (letterbox → inference → decode → class-aware 
 
 Identical class IDs, count, and order; the sub-percent box differences trace to the bilinear-resize implementation (Android `createScaledBitmap` vs PIL), not the postprocess logic. Reproduce: [`scripts/eval/yolo_detect_reference.py`](scripts/eval/yolo_detect_reference.py) (Python) and the app's **Detect Sample** button (Android).
 
+### YOLOv8n — 3-phase latency breakdown (FP32 vs INT8)
+
+Same image, 640×640, LiteRT CPU, median of 100 (warmup 20). Each phase is timed separately; **end-to-end has its own outer timer** (so its p50 ≠ the sum of phase p50s). Preprocess includes the INT8 input quantization; postprocess includes the INT8 output dequant. Rendering is excluded.
+
+| Precision | Preprocess | Inference | Postprocess | End-to-End | Size | Peak Mem |
+|---|---:|---:|---:|---:|---:|---:|
+| FP32 | 4.1 ms | 83.6 ms | 1.0 ms | **88.7 ms** | 12.28 MB | 198 MB |
+| INT8 | 10.1 ms | **26.8 ms** | 2.5 ms | **39.3 ms** | 3.27 MB | 146 MB |
+
+**The phase split changes the conclusion.** On inference alone INT8 is **3.1× faster** (83.6 → 26.8 ms). But it pays for that elsewhere: float→int8 **input quantization makes preprocess ~2.5× slower** (4.1 → 10.1 ms) and output dequant doubles postprocess. **End-to-end, INT8's lead shrinks to 2.25×** (88.7 → 39.3 ms) — still a clear win here, but an *inference-only* benchmark would have overstated it by ~40%.
+
+> The preprocess penalty is partly a scalar float→int8 loop (optimizable with a vectorized/NEON path); the postprocess penalty is the output dequant. Either way the lesson holds: **quantization relocates cost into pre/post — measure every phase, not just inference.**
+
+**v0.4 ↔ v0.5, the through-line:**
+- MobileNetV3-Small: INT8 PTQ **collapsed accuracy and was slower** → rejected.
+- YOLOv8n: INT8 is **genuinely faster end-to-end (2.25×)** — but less than inference-only implies.
+- INT8's value is entirely **model-, runtime-, and phase-dependent.** There is no universal answer; you have to measure.
+
 ---
 
 ## What This Project Is
@@ -282,11 +300,11 @@ android-edge-ai-benchmark-lab/
 - [x] **v0.3** — ExecuTorch CPU, 3-runtime comparison (44× gap vs LiteRT found — XNNPACK backend required)
 - [x] **v0.4** — ImageNet accuracy validation: FP32 69.4% baseline vs **full-integer INT8 PTQ collapse (0.6%)** — measured negative finding
 - [ ] **v0.4.1** — FP16 (intermediate compression) + QAT recovery experiment
-- [ ] **v0.5** — YOLOv8n object detection (preprocess / inference / postprocess split)
+- [x] **v0.5** — YOLOv8n object detection (preprocess / inference / postprocess split)
   - [x] v0.5.0 — Python export (ONNX + TFLite) & cross-runtime correctness (class-score cosine 1.000)
   - [x] v0.5.1 — Android LiteRT inference: FP32 87.9 ms vs INT8 27.0 ms (INT8 3.3× faster on this heavy model)
   - [x] v0.5.2 — Android postprocess / NMS + sample visualization (Python↔Android parity: same detections, score Δ ≤ 0.006)
-  - [ ] v0.5.3 — Android 3-phase benchmark + results table
+  - [x] v0.5.3 — Android 3-phase benchmark: INT8 inference 3.1× but end-to-end only 2.25× (quantize/dequant overhead in pre/post)
 - [ ] **v1.0** — Multi-device matrix, technical blog series
 
 ---
