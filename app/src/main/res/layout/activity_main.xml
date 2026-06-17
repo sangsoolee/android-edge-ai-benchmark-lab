@@ -110,6 +110,14 @@
         android:text="@string/btn_run"
         android:textAllCaps="false" />
 
+    <Button
+        android:id="@+id/btnDetect"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/btn_detect"
+        android:textAllCaps="false" />
+
     <TextView
         android:id="@+id/tvStatus"
         android:layout_width="match_parent"
@@ -124,6 +132,17 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
+        android:visibility="gone" />
+
+    <!-- v0.5.2: annotated detection preview -->
+    <ImageView
+        android:id="@+id/ivDetection"
+        android:layout_width="match_parent"
+        android:layout_height="240dp"
+        android:layout_marginTop="8dp"
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter"
+        android:contentDescription="@string/btn_detect"
         android:visibility="gone" />
 
     <!-- Results list -->

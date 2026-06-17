@@ -14,6 +14,12 @@ __pycache__/
 # Model files (large binaries, push separately)
 models/
 
+# Ultralytics export artifacts dropped in the repo root (v0.5)
+*.pt
+*.onnx
+*_saved_model/
+calibration_image_sample_data_*.npy
+
 # Benchmark results: commit curated top-level CSVs, ignore local pull artifacts
 # (adb pull nests data under results/raw/results/ — that copy stays ignored)
 results/raw/*

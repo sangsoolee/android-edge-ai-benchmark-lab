@@ -11,6 +11,11 @@
     <!-- Buttons -->
     <string name="btn_run">Run Benchmark</string>
     <string name="btn_export">Export CSV</string>
+    <string name="btn_detect">Detect Sample (YOLOv8n FP32)</string>
+
+    <!-- Detection (v0.5.2) -->
+    <string name="status_detecting">Running detection…</string>
+    <string name="status_no_sample">Push a sample image first:\nadb push img.jpg /sdcard/Android/data/com.edgeai.benchmark/files/samples/sample.jpg</string>
 
     <!-- Status messages -->
     <string name="status_idle">Ready. Select options and tap Run.</string>

@@ -1,0 +1,57 @@
+[
+  {
+    "class_id": 0,
+    "label": "person",
+    "score": 0.8909,
+    "box_xyxy": [
+      670.6,
+      380.6,
+      809.9,
+      879.6
+    ]
+  },
+  {
+    "class_id": 0,
+    "label": "person",
+    "score": 0.884,
+    "box_xyxy": [
+      221.8,
+      407.5,
+      343.9,
+      856.1
+    ]
+  },
+  {
+    "class_id": 0,
+    "label": "person",
+    "score": 0.8783,
+    "box_xyxy": [
+      50.7,
+      397.3,
+      244.4,
+      905.5
+    ]
+  },
+  {
+    "class_id": 5,
+    "label": "bus",
+    "score": 0.8406,
+    "box_xyxy": [
+      34.5,
+      229.4,
+      797.1,
+      767.5
+    ]
+  },
+  {
+    "class_id": 0,
+    "label": "person",
+    "score": 0.4313,
+    "box_xyxy": [
+      0.4,
+      549.8,
+      57.7,
+      868.6
+    ]
+  }
+]

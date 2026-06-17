@@ -2,6 +2,8 @@ package com.edgeai.benchmark.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -9,6 +11,7 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
@@ -24,6 +27,10 @@ import com.edgeai.benchmark.benchmark.BenchmarkEngine
 import com.edgeai.benchmark.benchmark.ExecuTorchEngine
 import com.edgeai.benchmark.benchmark.LiteRtEngine
 import com.edgeai.benchmark.benchmark.OnnxEngine
+import com.edgeai.benchmark.detection.Detection
+import com.edgeai.benchmark.detection.DetectionJsonWriter
+import com.edgeai.benchmark.detection.DetectionRenderer
+import com.edgeai.benchmark.detection.YoloDetector
 import com.edgeai.benchmark.model.Backend
 import com.edgeai.benchmark.model.BenchmarkResult
 import com.edgeai.benchmark.model.Precision
@@ -32,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 
 class MainActivity : AppCompatActivity() {
 
@@ -40,13 +48,18 @@ class MainActivity : AppCompatActivity() {
     private lateinit var spinnerBackend: Spinner
     private lateinit var spinnerPrecision: Spinner
     private lateinit var btnRun: Button
+    private lateinit var btnDetect: Button
     private lateinit var tvStatus: TextView
     private lateinit var progressBar: ProgressBar
+    private lateinit var ivDetection: ImageView
     private lateinit var recyclerResults: RecyclerView
     private lateinit var adapter: ResultsAdapter
 
     // Models dir: adb push ../models/ /sdcard/Android/data/com.edgeai.benchmark/files/models/
     private val modelsDir: File get() = File(getExternalFilesDir(null), "models")
+    // Sample image for detection: adb push img.jpg .../files/samples/sample.jpg
+    private val sampleImage: File get() = File(getExternalFilesDir(null), "samples/sample.jpg")
+    private val detectionOutDir: File get() = File(getExternalFilesDir(null), "results/detection")
 
     // Mapping from spinner index to filename prefix.
     // Must match SUPPORTED_MODELS in scripts/convert/export_*.py.
@@ -72,6 +85,7 @@ class MainActivity : AppCompatActivity() {
         requestStoragePermission()
 
         btnRun.setOnClickListener { startBenchmark() }
+        btnDetect.setOnClickListener { startDetection() }
     }
 
     /**
@@ -104,8 +118,10 @@ class MainActivity : AppCompatActivity() {
         spinnerBackend = findViewById(R.id.spinnerBackend)
         spinnerPrecision = findViewById(R.id.spinnerPrecision)
         btnRun = findViewById(R.id.btnRun)
+        btnDetect = findViewById(R.id.btnDetect)
         tvStatus = findViewById(R.id.tvStatus)
         progressBar = findViewById(R.id.progressBar)
+        ivDetection = findViewById(R.id.ivDetection)
         recyclerResults = findViewById(R.id.recyclerResults)
     }
 
@@ -185,8 +201,61 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---------------------------------------------------------------------------
+    // Detection (v0.5.2): run YOLOv8n FP32 on a pushed sample image, render + save.
+    // ---------------------------------------------------------------------------
+
+    private fun startDetection() {
+        val modelPath = File(modelsDir, "yolov8n_fp32.tflite").absolutePath
+        if (!File(modelPath).exists()) {
+            tvStatus.text = getString(R.string.status_model_missing)
+            Toast.makeText(this, "Model not found:\n$modelPath", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!sampleImage.exists()) {
+            tvStatus.text = getString(R.string.status_no_sample)
+            return
+        }
+
+        setRunning(true)
+        tvStatus.text = getString(R.string.status_detecting)
+
+        lifecycleScope.launch {
+            val result = withContext(Dispatchers.Default) {
+                runCatching {
+                    val src = BitmapFactory.decodeFile(sampleImage.absolutePath)
+                        ?: error("Could not decode ${sampleImage.name}")
+                    val dets: List<Detection> = YoloDetector(modelPath).use { it.detect(src) }
+                    val annotated = DetectionRenderer.render(src, dets)
+                    detectionOutDir.mkdirs()
+                    savePng(annotated, File(detectionOutDir, "android_sample.png"))
+                    DetectionJsonWriter.write(dets, File(detectionOutDir, "android_sample.json"))
+                    annotated to dets
+                }
+            }
+
+            result.onSuccess { (bmp, dets) ->
+                ivDetection.setImageBitmap(bmp)
+                ivDetection.visibility = View.VISIBLE
+                val top = dets.take(3).joinToString(", ") { "${it.label} ${"%.2f".format(it.score)}" }
+                tvStatus.text = "Detected ${dets.size}: $top"
+                Toast.makeText(this@MainActivity, "Saved android_sample.json / .png", Toast.LENGTH_SHORT).show()
+            }.onFailure { e ->
+                Log.e("MainActivity", "Detection failed", e)
+                tvStatus.text = getString(R.string.status_error, e.message)
+            }
+
+            setRunning(false)
+        }
+    }
+
+    private fun savePng(bmp: Bitmap, file: File) {
+        FileOutputStream(file).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
     private fun setRunning(running: Boolean) {
         btnRun.isEnabled = !running
+        btnDetect.isEnabled = !running
         progressBar.visibility = if (running) View.VISIBLE else View.GONE
         if (running) tvStatus.text = getString(R.string.status_running)
     }
