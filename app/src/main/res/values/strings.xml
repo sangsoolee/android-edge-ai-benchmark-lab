@@ -22,6 +22,7 @@
     <!-- Runtime options -->
     <string-array name="runtime_options">
         <item>LiteRT (TFLite)</item>
+        <item>ONNX Runtime</item>
     </string-array>
 
     <!-- Model options -->

@@ -18,23 +18,25 @@
 
 ## What We Found (Galaxy S26 Ultra · Snapdragon 8 Gen 3)
 
-### MobileNetV3-Small · LiteRT
+### MobileNetV3-Small — All Runtimes
 
-| Backend | Precision | p50 | p95 | p99 | Cold Start | Memory |
-|---|---|---:|---:|---:|---:|---:|
-| **CPU (XNNPACK)** | **FP32** | **1.42 ms** ✅ | **1.49 ms** | **1.59 ms** | 22.2 ms | 93.5 MB |
-| CPU (XNNPACK) | INT8 | 2.86 ms | 3.06 ms | 3.08 ms | 15.5 ms | 100.0 MB |
-| GPU delegate | FP32 | 2.83 ms | 3.11 ms | 3.26 ms | 204.8 ms | 163.2 MB |
+| Runtime | Backend | Precision | Model Size | p50 | p95 | p99 | Cold Start | Memory |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| **LiteRT** | **CPU (XNNPACK)** | **FP32** | 9.73 MB | **1.42 ms** ✅ | **1.49 ms** | **1.59 ms** | 22.2 ms | 93.5 MB |
+| LiteRT | CPU (XNNPACK) | INT8 | 2.76 MB | 2.86 ms | 3.06 ms | 3.08 ms | 15.5 ms | 100.0 MB |
+| LiteRT | GPU delegate | FP32 | 9.73 MB | 2.83 ms | 3.11 ms | 3.26 ms | 204.8 ms | 163.2 MB |
+| ONNX Runtime | CPU | FP32 | 9.71 MB | 5.41 ms | 5.58 ms | 5.67 ms | 65.9 ms | 132.3 MB |
 
 > Measurement: warmup=20, measured=100 runs · release build · airplane mode · no charging · 5-min cooldown
 
 **Key findings:**
-- 🏆 **CPU (FP32) wins** — Snapdragon 8 Gen 3 + XNNPACK is so fast that GPU transfer overhead dominates for small models
-- ⚠️ **GPU cold-start = 204 ms** — 9× slower than CPU (shader compilation cost). Never use GPU delegate for first-launch UX
-- ⚠️ **INT8 is 2× slower than FP32** — dequantize ops added by TFLite converter cancel out the compute savings on this chip
-- 📦 **INT8 is 3.5× smaller** (2.76 MB vs 9.73 MB) — the only win for INT8 is storage/download size
+- 🏆 **LiteRT CPU FP32 wins** — Snapdragon 8 Gen 3 + XNNPACK delivers the best latency across all configurations
+- ⚡ **LiteRT is 3.8× faster than ONNX Runtime** (1.42 ms vs 5.41 ms) — XNNPACK is highly ARM-optimized; ONNX Runtime uses a generic CPU path by default
+- ⚠️ **GPU cold-start = 204 ms** — 9× slower than CPU due to shader compilation. Critical for first-launch UX
+- ⚠️ **INT8 is 2× slower than FP32 on CPU** — dequantize ops cancel out compute savings on this chip
+- 📦 **INT8 is 3.5× smaller on disk** (2.76 MB vs 9.73 MB) — only advantage is storage/download size
 
-*The conventional wisdom that "GPU is always faster" and "INT8 is always faster" does not hold for lightweight models on modern mobile SoCs. Always benchmark on your target device.*
+*Always benchmark on your target device. "GPU is faster" and "INT8 is faster" are not universal truths.*
 
 ---
 
@@ -49,7 +51,7 @@ Most "on-device AI" articles benchmark on a simulator, use a single average late
 | Runtime | Status | Backends |
 |---|---|---|
 | [LiteRT / TFLite](https://ai.google.dev/edge/litert) 2.x | ✅ v0.1 | CPU (XNNPACK), GPU delegate |
-| [ONNX Runtime Android](https://onnxruntime.ai) 1.x | 🔜 v0.2 | CPU, NNAPI |
+| [ONNX Runtime Android](https://onnxruntime.ai) 1.x | ✅ v0.2 | CPU |
 | [ExecuTorch](https://pytorch.org/executorch) | 🔜 v0.3 | CPU, XNNPACK |
 
 ---
@@ -165,7 +167,7 @@ android-edge-ai-benchmark-lab/
 ## Roadmap
 
 - [x] **v0.1** — LiteRT (CPU + GPU), MobileNetV3-Small, p50/p95/p99, CSV export
-- [ ] **v0.2** — ONNX Runtime, LiteRT vs ONNX comparison charts
+- [x] **v0.2** — ONNX Runtime CPU, LiteRT vs ONNX Runtime comparison (3.8× gap found)
 - [ ] **v0.3** — ExecuTorch
 - [ ] **v0.4** — INT8 accuracy drop analysis (FP32 vs INT8 top-1 accuracy)
 - [ ] **v0.5** — YOLOv8n / YOLOv11n (preprocess / inference / postprocess split)

@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.edgeai.benchmark.R
 import com.edgeai.benchmark.benchmark.BenchmarkEngine
 import com.edgeai.benchmark.benchmark.LiteRtEngine
+import com.edgeai.benchmark.benchmark.OnnxEngine
 import com.edgeai.benchmark.model.Backend
 import com.edgeai.benchmark.model.BenchmarkResult
 import com.edgeai.benchmark.model.Precision
@@ -49,10 +50,12 @@ class MainActivity : AppCompatActivity() {
         "efficientnet_lite0"
     )
 
+    // File extension per runtime
+    private val runtimeExtensions = listOf("tflite", "onnx")
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
-        title = getString(R.string.app_name)
 
         bindViews()
         setupRecyclerView()
@@ -79,6 +82,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startBenchmark() {
+        val runtimeIndex = spinnerRuntime.selectedItemPosition
         val modelIndex = spinnerModel.selectedItemPosition
         val modelFileName = modelFileNames[modelIndex]
         val modelName = spinnerModel.selectedItem.toString()
@@ -94,7 +98,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         val precisionSuffix = if (precision == Precision.INT8) "int8" else "fp32"
-        val modelPath = File(modelsDir, "${modelFileName}_${precisionSuffix}.tflite").absolutePath
+        val ext = runtimeExtensions[runtimeIndex]
+        val modelPath = File(modelsDir, "${modelFileName}_${precisionSuffix}.$ext").absolutePath
 
         if (!File(modelPath).exists()) {
             tvStatus.text = getString(R.string.status_model_missing)
@@ -107,10 +112,10 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val result = withContext(Dispatchers.Default) {
                 runCatching {
-                    val engine: BenchmarkEngine = LiteRtEngine(
-                        context = this@MainActivity,
-                        backend = backend
-                    )
+                    val engine: BenchmarkEngine = when (runtimeIndex) {
+                        1 -> OnnxEngine(context = this@MainActivity, backend = backend)
+                        else -> LiteRtEngine(context = this@MainActivity, backend = backend)
+                    }
                     engine.benchmark(
                         modelPath = modelPath,
                         modelName = modelName,

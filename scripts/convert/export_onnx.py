@@ -52,6 +52,7 @@ def export_fp32(model: torch.nn.Module, model_name: str) -> Path:
         input_names=["input"],
         output_names=["output"],
         dynamic_axes={"input": {0: "batch"}, "output": {0: "batch"}},
+        dynamo=False,   # force legacy exporter; dynamo path separates weights into external files
     )
     print(f"  [ONNX FP32] → {out}")
     return out
