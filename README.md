@@ -11,7 +11,7 @@
 ---
 
 <p align="center">
-  <img src="docs/screenshot_benchmark.png" width="320" alt="Benchmark results on Galaxy S26 Ultra"/>
+  <img src="docs/screenshot_v02.png" width="320" alt="Benchmark results on Galaxy S26 Ultra"/>
 </p>
 
 ---
