@@ -59,6 +59,19 @@
 
 *The "fair tier" lesson: enabling each runtime's accelerator (NNAPI, XNNPACK) did **not** universally close the gap — it helped ONNX modestly and didn't help ExecuTorch at all on this build. "GPU is faster", "INT8 is faster", "this accelerator is faster" are not universal truths — always benchmark on your target device.*
 
+### YOLOv8n — Object Detection (inference-only latency)
+
+640×640 input, same protocol (median of 5). **Inference only** — preprocess (letterbox) and postprocess (NMS) are split out separately in v0.5.2–0.5.3.
+
+| Runtime | Backend | Precision | Size | p50 | p95 | p99 | Cold Start | Memory |
+|---|---|---|---:|---:|---:|---:|---:|---:|
+| LiteRT | CPU (XNNPACK) | FP32 | 12.28 MB | 87.9 ms | 89.0 ms | 89.5 ms | 116 ms | 159 MB |
+| LiteRT | CPU (XNNPACK) | INT8 | 3.27 MB | **27.0 ms** | 27.5 ms | 27.6 ms | 51 ms | 146 MB |
+
+**On YOLOv8n, INT8 is 3.3× faster *and* 3.75× smaller — the opposite of MobileNetV3-Small, where INT8 was *slower*.** On the heavy 640×640 detector the INT8 compute savings dominate; on the tiny classifier the dequantize overhead outweighed them. INT8's benefit is a function of the **compute-to-overhead ratio**, not a universal rule.
+
+> ⚠️ Latency only — **YOLOv8n INT8 detection accuracy (mAP) is not yet verified.** After the MobileNetV3 INT8 collapse, a *fast* INT8 model is not automatically a *correct* one; mAP validation is future work.
+
 ---
 
 ## What This Project Is
@@ -255,7 +268,7 @@ android-edge-ai-benchmark-lab/
 - [ ] **v0.4.1** — FP16 (intermediate compression) + QAT recovery experiment
 - [ ] **v0.5** — YOLOv8n object detection (preprocess / inference / postprocess split)
   - [x] v0.5.0 — Python export (ONNX + TFLite) & cross-runtime correctness (class-score cosine 1.000)
-  - [ ] v0.5.1 — Android LiteRT inference + latency / memory
+  - [x] v0.5.1 — Android LiteRT inference: FP32 87.9 ms vs INT8 27.0 ms (INT8 3.3× faster on this heavy model)
   - [ ] v0.5.2 — Android postprocess / NMS + sample visualization
   - [ ] v0.5.3 — Android 3-phase benchmark + results table
 - [ ] **v1.0** — Multi-device matrix, technical blog series
