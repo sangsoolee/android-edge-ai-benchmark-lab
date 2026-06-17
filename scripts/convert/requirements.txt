@@ -27,6 +27,9 @@ soc4onnx
 # Quantization
 torchao>=0.3.0        # PyTorch-native quantization (Phase 3+)
 
+# Object detection (v0.5) — YOLOv8n export to ONNX / TFLite
+ultralytics>=8.2.0
+
 # Analysis & visualization
 pandas>=2.1.0
 matplotlib>=3.8.0
