@@ -52,7 +52,18 @@ def load_results(input_dir: Path) -> pd.DataFrame:
 
     dfs = [pd.read_csv(f) for f in csv_files]
     df = pd.concat(dfs, ignore_index=True)
+
+    # latency_mode is a newer column; default older rows to end_to_end.
+    if "latency_mode" not in df.columns:
+        df["latency_mode"] = "end_to_end"
+    else:
+        df["latency_mode"] = df["latency_mode"].fillna("end_to_end")
+
     df["label"] = df["runtime"] + "\n" + df["backend"] + "\n" + df["precision"]
+    # Only disambiguate by mode when both end_to_end and kernel are present.
+    if df["latency_mode"].nunique() > 1:
+        df["label"] = df["label"] + "\n" + df["latency_mode"]
+
     print(f"Loaded {len(df)} result rows from {len(csv_files)} file(s)")
     return df
 
