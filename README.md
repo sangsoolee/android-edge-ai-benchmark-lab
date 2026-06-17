@@ -32,6 +32,24 @@
 
 > Measurement: warmup=20, measured=100 runs · **median of 5 sessions** · release build · airplane mode · no charging · 5-min cooldown · fixed-seed synthetic input (outputs verified identical across runtimes — see below)
 
+### MobileNetV3-Small — FP32 vs INT8 Accuracy (ImageNet validation, n=500)
+
+| Runtime | Precision | Quantization | Top-1 | Top-5 | Top-1 Drop | Result |
+|---|---|---|---:|---:|---:|---|
+| LiteRT / TFLite | FP32 | none | **69.4%** | 88.6% | — | ✅ Valid baseline |
+| LiteRT / TFLite | INT8 | full-integer PTQ | **0.6%** | 1.6% | **−68.8 pp** | ❌ Accuracy collapse |
+
+**This is a measured negative finding, not an eval bug.** FP32 reaching 69.4% (vs MobileNetV3-Small's official 67.7%) confirms preprocessing and label mapping are correct; the same manifest, preprocessing, and dtype detection were used for both precisions. *In this setup*, naive full-integer INT8 PTQ collapsed accuracy (Top-5 fell too: 88.6% → 1.6%) while only shrinking the model. See [results/accuracy/README.md](results/accuracy/README.md) for the sanity checks and likely causes.
+
+**Latency × size × accuracy — the actual decision:**
+
+| Precision | Size | p50 latency | Memory | Top-1 | Decision |
+|---|---:|---:|---:|---:|---|
+| FP32 | 9.73 MB | 1.53 ms | ~100 MB | 69.4% | ✅ Selected |
+| INT8 (full-integer) | 2.76 MB | 2.86 ms | ~100 MB | 0.6% | ❌ Rejected |
+
+> INT8 was 3.5× smaller but **slower** (dequantize overhead on this chip) **and** accuracy-collapsed — rejected here despite the size win. **Edge optimization must be measured across latency, memory, size, *and* accuracy together** — size/latency alone can hide a broken model.
+
 **Key findings:**
 - 🏆 **LiteRT CPU FP32 is fastest (1.53 ms)** — Snapdragon 8 Gen 3 + XNNPACK. All three runtimes produce identical outputs (cosine ≈ 1.000, same top-1), so the gaps are pure runtime/backend efficiency — not divergent conversions.
 - ⚡ **ONNX NNAPI beats ONNX CPU by ~40% at the median (5.43 → 3.28 ms)** — enabling the on-device accelerator helps, but the distribution is bimodal: NNAPI partially falls back to CPU for MobileNetV3's hard-swish ops, so p95/p99 stay near the CPU path.
@@ -47,7 +65,7 @@
 
 A **reproducible benchmarking pipeline** for comparing on-device AI inference runtimes on real Android hardware.
 
-Most "on-device AI" articles benchmark on a simulator, use a single average latency number, or don't disclose measurement conditions. This project measures **p50/p95/p99 latency, cold-start time, peak PSS memory, and thermal status**, documents the exact measurement protocol, and commits the raw result rows — every benchmark run, including repeat sessions — to [results/raw/](results/raw/). (Each row aggregates one 100-inference run; committing the full per-inference distributions is planned.)
+Most "on-device AI" articles benchmark on a simulator, use a single average latency number, or don't disclose measurement conditions. This project measures **p50/p95/p99 latency, cold-start time, peak PSS memory, and thermal status**, documents the exact measurement protocol, and commits the raw result rows — every benchmark run, including repeat sessions — to [results/raw/](results/raw/). (Each row aggregates one 100-inference run; committing the full per-inference distributions is planned — see `docs`/roadmap.)
 
 **Runtimes compared:**
 
@@ -115,8 +133,22 @@ pip install tf-keras
 ### Step 2 — Convert models
 
 ```bash
+# TFLite (LiteRT)
 python scripts/convert/export_tflite.py --model mobilenet_v3_small --precision fp32
+# INT8 with random calibration (fast)
 python scripts/convert/export_tflite.py --model mobilenet_v3_small --precision int8
+# INT8 with real ImageNet calibration (better accuracy, requires dataset)
+python scripts/convert/export_tflite.py --model mobilenet_v3_small --precision int8 \
+  --representative-data /path/to/imagenet/val --representative-samples 500
+
+# ONNX
+python scripts/convert/export_onnx.py --model mobilenet_v3_small --precision fp32
+
+# ExecuTorch
+python scripts/convert/export_executorch.py --model mobilenet_v3_small --precision fp32
+
+# TorchAO INT8 (alternative quantization pipeline)
+python scripts/convert/export_torchao.py --model mobilenet_v3_small
 ```
 
 ### Step 3 — Push to device
@@ -147,9 +179,38 @@ mv ./results/raw/results/*.csv ./results/raw/ 2>/dev/null || true
 ### Step 6 — Analyze
 
 ```bash
+# Charts (latency / memory / cold-start)
 python scripts/analyze/plot_results.py \
   --input results/raw/ \
   --output results/graphs/
+
+# Per-configuration summary table
+python scripts/analyze/parse_results.py \
+  --input results/raw/ \
+  --markdown
+
+# FP32 vs INT8 accuracy (requires ImageNet validation set)
+# Step A: build manifest from Kaggle download
+python scripts/eval/prepare_imagenet_val.py \
+  --val-images-dir /path/to/ILSVRC/Data/CLS-LOC/val \
+  --solution-csv   /path/to/LOC_val_solution.csv \
+  --output-dir     data/imagenet
+
+# Step B: evaluate each model (smoke test: --limit 500)
+python scripts/eval/accuracy_eval.py \
+  --model models/mobilenet_v3_small_fp32.tflite \
+  --manifest data/imagenet/val_manifest.csv \
+  --limit 5000
+
+python scripts/eval/accuracy_eval.py \
+  --model models/mobilenet_v3_small_int8.tflite \
+  --manifest data/imagenet/val_manifest.csv \
+  --limit 5000
+
+# Step C: compare and generate report
+python scripts/eval/compare_accuracy.py \
+  --fp32 results/accuracy/mobilenet_v3_small_fp32_results.json \
+  --int8 results/accuracy/mobilenet_v3_small_int8_results.json
 ```
 
 ---
@@ -159,16 +220,19 @@ python scripts/analyze/plot_results.py \
 ```
 android-edge-ai-benchmark-lab/
 ├── app/src/main/kotlin/com/edgeai/benchmark/
-│   ├── benchmark/        # BenchmarkEngine (abstract) + LiteRtEngine
+│   ├── benchmark/        # BenchmarkEngine (abstract) + LiteRtEngine / OnnxEngine / ExecuTorchEngine
 │   ├── model/            # BenchmarkResult data class, Runtime/Backend/Precision enums
 │   ├── ui/               # MainActivity, ResultsAdapter
 │   └── util/             # ThermalMonitor, MemoryTracker, CsvExporter
 ├── scripts/
-│   ├── convert/          # PyTorch → ONNX / TFLite / ExecuTorch
-│   └── analyze/          # CSV → charts (matplotlib / seaborn)
+│   ├── convert/          # PyTorch → ONNX / TFLite / ExecuTorch / TorchAO
+│   ├── eval/             # Accuracy evaluation pipeline (prepare → eval → compare)
+│   └── analyze/          # CSV → latency/memory charts (matplotlib / seaborn)
 ├── results/
 │   ├── raw/              # Raw CSV from device (git-ignored)
-│   └── graphs/           # Generated charts (git-ignored)
+│   ├── graphs/           # Generated charts (git-ignored)
+│   └── accuracy/         # FP32 vs INT8 accuracy results and report
+├── data/                 # ImageNet val dataset (git-ignored — large)
 └── docs/                 # Screenshots, write-ups
 ```
 
@@ -187,7 +251,8 @@ android-edge-ai-benchmark-lab/
 - [x] **v0.1** — LiteRT (CPU + GPU), MobileNetV3-Small, p50/p95/p99, CSV export
 - [x] **v0.2** — ONNX Runtime CPU, LiteRT vs ONNX Runtime comparison (3.8× gap found)
 - [x] **v0.3** — ExecuTorch CPU, 3-runtime comparison (44× gap vs LiteRT found — XNNPACK backend required)
-- [ ] **v0.4** — INT8 accuracy drop analysis (FP32 vs INT8 top-1 accuracy)
+- [x] **v0.4** — ImageNet accuracy validation: FP32 69.4% baseline vs **full-integer INT8 PTQ collapse (0.6%)** — measured negative finding
+- [ ] **v0.4.1** — FP16 (intermediate compression) + QAT recovery experiment
 - [ ] **v0.5** — YOLOv8n / YOLOv11n (preprocess / inference / postprocess split)
 - [ ] **v1.0** — Multi-device matrix, technical blog series
 
