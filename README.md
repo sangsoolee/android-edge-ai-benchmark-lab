@@ -253,7 +253,11 @@ android-edge-ai-benchmark-lab/
 - [x] **v0.3** — ExecuTorch CPU, 3-runtime comparison (44× gap vs LiteRT found — XNNPACK backend required)
 - [x] **v0.4** — ImageNet accuracy validation: FP32 69.4% baseline vs **full-integer INT8 PTQ collapse (0.6%)** — measured negative finding
 - [ ] **v0.4.1** — FP16 (intermediate compression) + QAT recovery experiment
-- [ ] **v0.5** — YOLOv8n / YOLOv11n (preprocess / inference / postprocess split)
+- [ ] **v0.5** — YOLOv8n object detection (preprocess / inference / postprocess split)
+  - [x] v0.5.0 — Python export (ONNX + TFLite) & cross-runtime correctness (class-score cosine 1.000)
+  - [ ] v0.5.1 — Android LiteRT inference + latency / memory
+  - [ ] v0.5.2 — Android postprocess / NMS + sample visualization
+  - [ ] v0.5.3 — Android 3-phase benchmark + results table
 - [ ] **v1.0** — Multi-device matrix, technical blog series
 
 ---
