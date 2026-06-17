@@ -1,0 +1,39 @@
+# Claude Code internal instructions (not for public repo)
+CLAUDE.md
+
+# docs/ is tracked (screenshots, write-ups)
+
+# Python virtual environments
+.venv-convert/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Model files (large binaries, push separately)
+models/
+
+# Benchmark results (raw data, not source)
+results/raw/
+results/graphs/
+
+# Android build outputs
+app/build/
+*.apk
+*.aab
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+local.properties
+
+# Gradle
+.gradle/
+build/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

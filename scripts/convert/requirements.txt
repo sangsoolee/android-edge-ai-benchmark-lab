@@ -1,0 +1,29 @@
+# Model conversion
+torch>=2.2.0
+torchvision>=0.17.0
+onnx>=1.15.0
+onnxruntime>=1.17.0
+onnxconverter-common>=1.13.0
+onnxscript>=0.1.0     # required by torch.onnx internals since PyTorch 2.1
+tensorflow>=2.15.0    # for TFLite conversion via onnx2tf
+onnx2tf>=1.21.0
+# onnx2tf dependencies not auto-installed via pip:
+onnx-graphsurgeon
+psutil
+flatbuffers
+ml_dtypes
+ai-edge-litert
+sng4onnx
+onnxsim
+snc4onnx
+sam4onnx
+soc4onnx
+
+# Quantization
+torchao>=0.3.0        # PyTorch-native quantization (Phase 3+)
+
+# Analysis & visualization
+pandas>=2.1.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+numpy>=1.26.0

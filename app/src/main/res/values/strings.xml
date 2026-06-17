@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Edge AI Benchmark</string>
+
+    <!-- Spinner labels -->
+    <string name="label_runtime">Runtime</string>
+    <string name="label_model">Model</string>
+    <string name="label_backend">Backend</string>
+    <string name="label_precision">Precision</string>
+
+    <!-- Buttons -->
+    <string name="btn_run">Run Benchmark</string>
+    <string name="btn_export">Export CSV</string>
+
+    <!-- Status messages -->
+    <string name="status_idle">Ready. Select options and tap Run.</string>
+    <string name="status_running">Running benchmark…</string>
+    <string name="status_done">Done. Results saved to CSV.</string>
+    <string name="status_error">Error: %1$s</string>
+    <string name="status_model_missing">Model file not found. Push models via adb first.</string>
+
+    <!-- Runtime options -->
+    <string-array name="runtime_options">
+        <item>LiteRT (TFLite)</item>
+    </string-array>
+
+    <!-- Model options -->
+    <string-array name="model_options">
+        <item>MobileNetV3-Small</item>
+        <item>EfficientNet-Lite0</item>
+    </string-array>
+
+    <!-- Backend options -->
+    <string-array name="backend_options">
+        <item>CPU</item>
+        <item>GPU Delegate</item>
+    </string-array>
+
+    <!-- Precision options -->
+    <string-array name="precision_options">
+        <item>FP32</item>
+        <item>INT8</item>
+    </string-array>
+</resources>
