@@ -71,15 +71,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Only LiteRT (runtime index 0) implements a GPU delegate. ONNX Runtime and
-     * ExecuTorch are CPU-only, so restrict their backend options to CPU — this
-     * prevents the user from selecting GPU and getting a CPU run mislabeled as GPU.
+     * Backend options are runtime-specific so the user can't pick a backend the
+     * engine doesn't actually run (which would mislabel the CSV):
+     *   LiteRT     → CPU, GPU delegate
+     *   ONNX       → CPU, NNAPI
+     *   ExecuTorch → CPU
      */
     private fun setupBackendSpinnerLink() {
         spinnerRuntime.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                val arrayRes = if (position == 0) R.array.backend_options
-                               else R.array.backend_options_cpu_only
+                val arrayRes = when (position) {
+                    0 -> R.array.backend_options            // LiteRT: CPU / GPU
+                    1 -> R.array.backend_options_onnx       // ONNX: CPU / NNAPI
+                    else -> R.array.backend_options_cpu_only // ExecuTorch: CPU
+                }
                 spinnerBackend.adapter = ArrayAdapter.createFromResource(
                     this@MainActivity, arrayRes, android.R.layout.simple_spinner_item
                 ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
@@ -117,9 +122,12 @@ class MainActivity : AppCompatActivity() {
             else -> Precision.FP32
         }
 
-        val backend = when (spinnerBackend.selectedItemPosition) {
-            1 -> Backend.GPU_DELEGATE
-            else -> Backend.CPU
+        // Backend meaning depends on the selected runtime (see setupBackendSpinnerLink).
+        val backendIndex = spinnerBackend.selectedItemPosition
+        val backend = when (runtimeIndex) {
+            0 -> if (backendIndex == 1) Backend.GPU_DELEGATE else Backend.CPU  // LiteRT
+            1 -> if (backendIndex == 1) Backend.NNAPI else Backend.CPU         // ONNX
+            else -> Backend.CPU                                                // ExecuTorch
         }
 
         val precisionSuffix = if (precision == Precision.INT8) "int8" else "fp32"
@@ -138,8 +146,8 @@ class MainActivity : AppCompatActivity() {
             val result = withContext(Dispatchers.Default) {
                 runCatching {
                     val engine: BenchmarkEngine = when (runtimeIndex) {
-                        1 -> OnnxEngine(context = this@MainActivity, backend = backend)
-                        2 -> ExecuTorchEngine(context = this@MainActivity, backend = backend)
+                        1 -> OnnxEngine(context = this@MainActivity, requestedBackend = backend)
+                        2 -> ExecuTorchEngine(context = this@MainActivity, requestedBackend = backend)
                         else -> LiteRtEngine(context = this@MainActivity, backend = backend)
                     }
                     engine.benchmark(

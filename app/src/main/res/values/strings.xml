@@ -42,6 +42,12 @@
         <item>CPU</item>
     </string-array>
 
+    <!-- ONNX Runtime: CPU (MLAS) or NNAPI execution provider -->
+    <string-array name="backend_options_onnx">
+        <item>CPU</item>
+        <item>NNAPI</item>
+    </string-array>
+
     <!-- Precision options -->
     <string-array name="precision_options">
         <item>FP32</item>

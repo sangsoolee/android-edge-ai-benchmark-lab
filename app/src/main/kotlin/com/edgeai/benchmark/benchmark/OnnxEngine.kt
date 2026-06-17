@@ -27,15 +27,15 @@ class OnnxEngine(
 ) : BenchmarkEngine(context) {
 
     init {
-        // Only the CPU path is implemented. Reject anything else so the recorded
-        // backend can never disagree with what actually ran (NNAPI/GPU are TODO).
-        require(requestedBackend == Backend.CPU) {
-            "OnnxEngine backend $requestedBackend is not implemented yet (CPU only)."
+        // CPU (default MLAS EP) and NNAPI are supported; reject others so the
+        // recorded backend can never disagree with what actually ran.
+        require(requestedBackend == Backend.CPU || requestedBackend == Backend.NNAPI) {
+            "OnnxEngine backend $requestedBackend not supported (CPU or NNAPI only)."
         }
     }
 
     override val runtime = Runtime.ONNX_RUNTIME
-    override val backend = Backend.CPU
+    override val backend = requestedBackend
 
     private var ortEnv: OrtEnvironment? = null
     private var ortSession: OrtSession? = null
@@ -51,14 +51,22 @@ class OnnxEngine(
 
         val sessionOptions = OrtSession.SessionOptions().apply {
             setIntraOpNumThreads(numThreads)
-            // TODO(v0.2): NNAPI delegate path
-            // addNnapi()
+            if (backend == Backend.NNAPI) {
+                // NNAPI execution provider (Android on-device accelerator).
+                // If this fails to compile on onnxruntime-android 1.17.3, the API
+                // is the flagged overload: addNnapi(EnumSet.noneOf(NNAPIFlags::class.java)).
+                addNnapi()
+            }
         }
 
         ortSession = ortEnv!!.createSession(
             File(modelPath).readBytes(),
             sessionOptions
         )
+
+        // Deterministic non-zero input (fixed seed → identical every run)
+        val rng = java.util.Random(42L)
+        for (i in inputData.indices) inputData[i] = rng.nextFloat()
 
         // First inference included in cold-start measurement
         runInference()
