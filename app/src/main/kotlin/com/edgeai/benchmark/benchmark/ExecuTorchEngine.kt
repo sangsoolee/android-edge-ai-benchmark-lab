@@ -17,10 +17,19 @@ import org.pytorch.executorch.Tensor
  */
 class ExecuTorchEngine(
     context: Context,
-    override val backend: Backend = Backend.CPU
+    requestedBackend: Backend = Backend.CPU
 ) : BenchmarkEngine(context) {
 
+    init {
+        // .pte runs on the CPU executor only here. Reject other backends so the
+        // recorded backend always matches what actually ran.
+        require(requestedBackend == Backend.CPU) {
+            "ExecuTorchEngine backend $requestedBackend is not implemented yet (CPU only)."
+        }
+    }
+
     override val runtime = Runtime.EXECUTORCH
+    override val backend = Backend.CPU
 
     private var module: Module? = null
 

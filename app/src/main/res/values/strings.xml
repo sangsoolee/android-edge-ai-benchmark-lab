@@ -29,13 +29,17 @@
     <!-- Model options -->
     <string-array name="model_options">
         <item>MobileNetV3-Small</item>
-        <item>EfficientNet-Lite0</item>
+        <item>EfficientNet-B0</item>
     </string-array>
 
-    <!-- Backend options -->
+    <!-- Backend options (LiteRT supports GPU delegate; ONNX/ExecuTorch are CPU-only) -->
     <string-array name="backend_options">
         <item>CPU</item>
         <item>GPU Delegate</item>
+    </string-array>
+
+    <string-array name="backend_options_cpu_only">
+        <item>CPU</item>
     </string-array>
 
     <!-- Precision options -->

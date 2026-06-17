@@ -22,11 +22,20 @@ import java.io.File
  */
 class OnnxEngine(
     context: Context,
-    override val backend: Backend = Backend.CPU,
+    requestedBackend: Backend = Backend.CPU,
     private val numThreads: Int = 4
 ) : BenchmarkEngine(context) {
 
+    init {
+        // Only the CPU path is implemented. Reject anything else so the recorded
+        // backend can never disagree with what actually ran (NNAPI/GPU are TODO).
+        require(requestedBackend == Backend.CPU) {
+            "OnnxEngine backend $requestedBackend is not implemented yet (CPU only)."
+        }
+    }
+
     override val runtime = Runtime.ONNX_RUNTIME
+    override val backend = Backend.CPU
 
     private var ortEnv: OrtEnvironment? = null
     private var ortSession: OrtSession? = null

@@ -6,6 +6,8 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.Spinner
@@ -46,10 +48,11 @@ class MainActivity : AppCompatActivity() {
     // Models dir: adb push ../models/ /sdcard/Android/data/com.edgeai.benchmark/files/models/
     private val modelsDir: File get() = File(getExternalFilesDir(null), "models")
 
-    // Mapping from spinner index to filename prefix
+    // Mapping from spinner index to filename prefix.
+    // Must match SUPPORTED_MODELS in scripts/convert/export_*.py.
     private val modelFileNames = listOf(
         "mobilenet_v3_small",
-        "efficientnet_lite0"
+        "efficientnet_b0"
     )
 
     // File extension per runtime
@@ -61,9 +64,29 @@ class MainActivity : AppCompatActivity() {
 
         bindViews()
         setupRecyclerView()
+        setupBackendSpinnerLink()
         requestStoragePermission()
 
         btnRun.setOnClickListener { startBenchmark() }
+    }
+
+    /**
+     * Only LiteRT (runtime index 0) implements a GPU delegate. ONNX Runtime and
+     * ExecuTorch are CPU-only, so restrict their backend options to CPU — this
+     * prevents the user from selecting GPU and getting a CPU run mislabeled as GPU.
+     */
+    private fun setupBackendSpinnerLink() {
+        spinnerRuntime.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val arrayRes = if (position == 0) R.array.backend_options
+                               else R.array.backend_options_cpu_only
+                spinnerBackend.adapter = ArrayAdapter.createFromResource(
+                    this@MainActivity, arrayRes, android.R.layout.simple_spinner_item
+                ).apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
     }
 
     private fun bindViews() {
