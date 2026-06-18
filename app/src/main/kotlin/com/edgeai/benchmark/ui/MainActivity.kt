@@ -93,6 +93,10 @@ class MainActivity : AppCompatActivity() {
         setupBackendSpinnerLink()
         requestStoragePermission()
 
+        modelsDir.mkdirs()
+        sampleImage.parentFile?.mkdirs()
+        detectionOutDir.mkdirs()
+
         btnRun.setOnClickListener { startBenchmark() }
         btnDetect.setOnClickListener { startDetection() }
         btnDetectBench.setOnClickListener { startDetectionBenchmark() }
@@ -169,6 +173,12 @@ class MainActivity : AppCompatActivity() {
         val modelPath = File(modelsDir, "${modelFileName}_${precisionSuffix}.$ext").absolutePath
 
         if (!File(modelPath).exists()) {
+            Log.w(
+                "MainActivity",
+                "Model not found: $modelPath; modelsDir=${modelsDir.absolutePath} " +
+                    "exists=${modelsDir.exists()} canRead=${modelsDir.canRead()} " +
+                    "files=${modelsDir.list()?.joinToString() ?: "<null>"}"
+            )
             tvStatus.text = getString(R.string.status_model_missing)
             Toast.makeText(this, "Model not found:\n$modelPath", Toast.LENGTH_LONG).show()
             return

@@ -63,6 +63,9 @@ def load_results(input_dir: Path) -> pd.DataFrame:
     # Only disambiguate by mode when both end_to_end and kernel are present.
     if df["latency_mode"].nunique() > 1:
         df["label"] = df["label"] + "\n" + df["latency_mode"]
+    # Multi-device (v1.0): prefix the device when more than one is present.
+    if "device_model" in df.columns and df["device_model"].nunique() > 1:
+        df["label"] = df["device_model"] + "\n" + df["label"]
 
     print(f"Loaded {len(df)} result rows from {len(csv_files)} file(s)")
     return df

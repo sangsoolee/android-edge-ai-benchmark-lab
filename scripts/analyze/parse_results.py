@@ -46,16 +46,22 @@ STATS_COLS = [
     "cold_start_ms", "peak_memory_mb", "model_size_mb",
 ]
 
-GROUP_COLS = ["runtime", "backend", "model_name", "precision", "latency_mode"]
+# device_model included so multi-device CSVs don't collapse into one row (v1.0).
+GROUP_COLS = ["device_model", "runtime", "backend", "model_name", "precision", "latency_mode"]
 
 
 def aggregate(df: pd.DataFrame) -> pd.DataFrame:
-    # Keep most-recent run per configuration (same device session may repeat runs)
-    df = df.sort_values("timestamp_utc_ms")
-    deduped = df.groupby(GROUP_COLS).last().reset_index()
+    # Median across the repeated runs per config (robust to bimodal/thermal runs,
+    # unlike taking a single last run). Group also by model_size so genuinely
+    # different artifacts under the same config — e.g. ExecuTorch portable (9.84 MB)
+    # vs XNNPACK-lowered (9.73 MB) .pte — stay as separate rows.
+    df = df.copy()
+    df["model_size_mb"] = df["model_size_mb"].round(2)
+    keys = GROUP_COLS + ["model_size_mb"]
 
-    summary = deduped[GROUP_COLS + STATS_COLS].copy()
-    for col in STATS_COLS:
+    stat_cols = [c for c in STATS_COLS if c != "model_size_mb"]
+    summary = df.groupby(keys)[stat_cols].median().reset_index()
+    for col in stat_cols:
         summary[col] = summary[col].round(3)
     return summary.sort_values(["model_name", "p50_latency_ms"])
 

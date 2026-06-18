@@ -22,13 +22,13 @@
 
 | Runtime | Backend | Precision | Model Size | p50 | p95 | p99 | Cold Start | Memory |
 |---|---|---|---:|---:|---:|---:|---:|---:|
-| **LiteRT** | **CPU (XNNPACK)** | **FP32** | 9.73 MB | **1.53 ms** ✅ | 1.55 ms | 1.56 ms | 18 ms | 100 MB |
-| LiteRT | GPU delegate | FP32 | 9.73 MB | 2.59 ms | 3.23 ms | 3.70 ms | 177 ms | 187 MB |
-| LiteRT | CPU (XNNPACK) | INT8 | 2.76 MB | 2.86 ms | 3.22 ms | 3.93 ms | 16 ms | 100 MB |
+| **ExecuTorch** | **CPU (XNNPACK)** | **FP32** | 9.73 MB | **0.89 ms** 🏆 | 1.06 ms | 1.15 ms | 16 ms | 116 MB |
+| LiteRT | CPU (XNNPACK) | FP32 | 9.73 MB | 1.48 ms | 1.54 ms | 1.56 ms | 24 ms | 95 MB |
+| LiteRT | GPU delegate | FP32 | 9.73 MB | 2.59 ms | 3.11 ms | 3.37 ms | 177 ms | 186 MB |
+| LiteRT | CPU (XNNPACK) | INT8 | 2.76 MB | 2.87 ms | 3.16 ms | 3.64 ms | 18 ms | 100 MB |
 | ONNX Runtime | NNAPI | FP32 | 9.71 MB | 3.28 ms | 5.58 ms | 5.73 ms | 39 ms | 143 MB |
-| ONNX Runtime | CPU | FP32 | 9.71 MB | 5.43 ms | 5.68 ms | 5.85 ms | 44 ms | 147 MB |
-| ExecuTorch | CPU (portable) | FP32 | 9.84 MB | 62.6 ms | 63.3 ms | 63.5 ms | 99 ms | 114 MB |
-| ExecuTorch | CPU (XNNPACK-lowered) | FP32 | 9.73 MB | 74.1 ms ⚠️ | 75.7 ms | 75.8 ms | 89 ms | 140 MB |
+| ONNX Runtime | CPU | FP32 | 9.71 MB | 5.43 ms | 5.59 ms | 5.74 ms | 44 ms | 147 MB |
+| ExecuTorch | CPU (**portable**) | FP32 | 9.84 MB | 70.8 ms | 72.5 ms | 72.8 ms | 93 ms | 138 MB |
 
 > Measurement: warmup=20, measured=100 runs · **median of 5 sessions** · release build · airplane mode · no charging · 5-min cooldown · fixed-seed synthetic input (outputs verified identical across runtimes — see below)
 
@@ -57,11 +57,11 @@
 > ⚠️ The QAT PoC used the **same 500 images for fine-tune and eval** (no train/eval split), so 16.6% is an optimistic upper bound — and it was still low, confirming the PoC training budget was insufficient. This is a **toolchain-feasibility check, not an apples-to-apples recovery** of the MobileNetV3 baseline (different architecture/weights). **Conclusion: FP16 is the practical recovery path here; proper QAT needs a real train/eval split + training budget → future work.**
 
 **Key findings:**
-- 🏆 **LiteRT CPU FP32 is fastest (1.53 ms)** — Snapdragon 8 Gen 3 + XNNPACK. All three runtimes produce identical outputs (cosine ≈ 1.000, same top-1), so the gaps are pure runtime/backend efficiency — not divergent conversions.
-- ⚡ **ONNX NNAPI beats ONNX CPU by ~40% at the median (5.43 → 3.28 ms)** — enabling the on-device accelerator helps, but the distribution is bimodal: NNAPI partially falls back to CPU for MobileNetV3's hard-swish ops, so p95/p99 stay near the CPU path.
-- 🐢 **ExecuTorch XNNPACK lowering did NOT help here (62.6 → 74.1 ms)** — on the prebuilt `executorch-android:1.3.1` AAR we could not confirm the XNNPACK delegate engaged (no delegate logs, no speedup, measured under back-to-back thermal load). Lowering the `.pte` is necessary but not sufficient — production use needs a runtime build with the XNNPACK backend verified.
-- ⚠️ **GPU cold start ≈ 177 ms** — ~10× the CPU path (shader compilation). Critical for first-launch UX.
-- ⚠️ **INT8 is ~2× slower than FP32 on CPU (1.53 → 2.86 ms)** — dequantize ops outweigh compute savings on this chip; INT8's only win here is 3.5× smaller on disk.
+- 🏆 **ExecuTorch with the XNNPACK delegate is fastest (0.89 ms)**, narrowly ahead of LiteRT CPU (1.48 ms) — both run XNNPACK kernels. All runtimes produce identical outputs (cosine ≈ 1.000), so the gaps are pure runtime efficiency.
+- 🔁 **Correction (and the best lesson here):** an earlier version of this README reported ExecuTorch as "44× slower / XNNPACK didn't help (74 ms)." That was wrong — it measured the **portable executor** (and a *stale* portable `.pte` left on the device). With the XNNPACK-lowered `.pte` actually on-device, ExecuTorch drops from **70.8 ms (portable) → 0.89 ms (XNNPACK)**. Lesson: *verify the artifact that's actually on the device.*
+- ⚡ **ONNX NNAPI beats ONNX CPU by ~40% on Snapdragon (5.43 → 3.28 ms)** — but the distribution is bimodal (NNAPI partially falls back for hard-swish), and **on Exynos NNAPI is *slower* than its own CPU path** (see cross-device matrix). NNAPI's value is vendor-dependent.
+- ⚠️ **GPU cold start ≈ 177 ms** — ~10× the CPU path (shader compilation). Critical for first-launch UX; and GPU p50 (2.59 ms) loses to CPU on this small model.
+- ⚠️ **INT8 is ~2× slower than FP32 on CPU (1.48 → 2.87 ms)** for this classifier — dequantize ops outweigh compute savings; INT8's only win here is 3.5× smaller on disk (and on YOLOv8n INT8 is *faster* — see below).
 
 *The "fair tier" lesson: enabling each runtime's accelerator (NNAPI, XNNPACK) did **not** universally close the gap — it helped ONNX modestly and didn't help ExecuTorch at all on this build. "GPU is faster", "INT8 is faster", "this accelerator is faster" are not universal truths — always benchmark on your target device.*
 
@@ -111,6 +111,29 @@ Same image, 640×640, LiteRT CPU, median of 100 (warmup 20). Each phase is timed
 - MobileNetV3-Small: INT8 PTQ **collapsed accuracy and was slower** → rejected.
 - YOLOv8n: INT8 is **genuinely faster end-to-end (2.25×)** — but less than inference-only implies.
 - INT8's value is entirely **model-, runtime-, and phase-dependent.** There is no universal answer; you have to measure.
+
+---
+
+## Cross-device: Snapdragon vs Exynos
+
+Same APK, same models, same protocol on two chips — **Galaxy S26 Ultra (Snapdragon 8 Gen 3, Adreno)** vs **Galaxy S24 (SM-S947B, Exynos 2400, Xclipse 940)**. Median p50 (ms), MobileNetV3-Small unless noted.
+
+| Runtime / Backend | Precision | Snapdragon 8 Gen 3 | Exynos 2400 | Notes |
+|---|---|---:|---:|---|
+| ExecuTorch CPU (XNNPACK) | FP32 | **0.89** | **1.13** | fastest on both |
+| LiteRT CPU (XNNPACK) | FP32 | 1.48 | 1.67 | |
+| LiteRT CPU (XNNPACK) | INT8 | 2.87 | 2.71 | Exynos slightly faster |
+| LiteRT GPU delegate | FP32 | 2.59 | 3.18 | cold start ~177–182 ms both |
+| ONNX Runtime CPU | FP32 | 5.43 | **3.39** | Exynos CPU faster |
+| ONNX Runtime NNAPI | FP32 | **3.28** | 4.95 | **opposite verdict per chip** |
+| LiteRT CPU — YOLOv8n | FP32 | 87.9 | 142.9 | Snapdragon faster on the heavy model |
+| LiteRT CPU — YOLOv8n | INT8 | 27.0 | 38.5 | INT8 wins on both |
+
+**Cross-device findings:**
+- 🔀 **NNAPI flips per vendor.** On Snapdragon, ONNX NNAPI beats its CPU path (5.43 → 3.28 ms). On Exynos, NNAPI is *slower* than its own CPU (3.39 → 4.95 ms). "Enable the NPU" is not portable advice.
+- 🟢 **Exynos is faster on small CPU paths** (ONNX CPU 3.39 vs 5.43), **slower on the heavy YOLOv8n** (142.9 vs 87.9 ms). Chip strengths are workload-dependent.
+- 🧠 **Exynos uses notably more memory** (ExecuTorch peak 207 vs 116 MB; ONNX 211 vs 147 MB).
+- ✅ **The fastest config (ExecuTorch XNNPACK) and the INT8-helps-YOLO finding hold on both chips** — but the *runner-up ordering* does not. "Fastest runtime" is a per-device question; the pipeline groups results by `device_model` so a third phone is a measure-and-drop-in.
 
 ---
 
@@ -204,18 +227,27 @@ python scripts/convert/export_executorch.py --model mobilenet_v3_small --precisi
 python scripts/convert/export_torchao.py --model mobilenet_v3_small
 ```
 
-### Step 3 — Push to device
-
-```bash
-adb shell mkdir -p /sdcard/Android/data/com.edgeai.benchmark/files/models
-adb push models/ /sdcard/Android/data/com.edgeai.benchmark/files/models/
-```
-
-### Step 4 — Build & install
+### Step 3 — Build, install, launch once
 
 ```bash
 ./gradlew assembleRelease
 adb install -r app/build/outputs/apk/release/app-release.apk
+# Launch once so the APP creates app-owned models/ samples/ results/ dirs.
+adb shell monkey -p com.edgeai.benchmark -c android.intent.category.LAUNCHER 1
+```
+
+> ⚠️ **Do not `adb shell mkdir` the `models/` dir.** It would be owned by `shell`,
+> and the app (a different uid) gets `canRead=false` on it — so models look
+> "missing" even when the files are present. The app creates app-owned dirs on
+> launch; push files into those.
+
+### Step 4 — Push models & sample image
+
+```bash
+# Push CONTENTS into the app-created dir ('models/.' avoids a nested models/models/)
+adb push models/. /sdcard/Android/data/com.edgeai.benchmark/files/models/
+# Detection sample (any image; e.g. ultralytics' bus.jpg)
+adb push sample.jpg /sdcard/Android/data/com.edgeai.benchmark/files/samples/sample.jpg
 ```
 
 ### Step 5 — Run & pull results
@@ -293,9 +325,19 @@ android-edge-ai-benchmark-lab/
 
 ## Device Matrix
 
+The analysis pipeline groups results by `device_model`, so adding a phone is a
+measure-and-drop-in operation. "Best runtime" is a per-device question.
+
 | Device | SoC | Android | Results |
 |---|---|---|---|
-| Samsung Galaxy S26 Ultra (SM-S948N) | Snapdragon 8 Gen 3 | Android 16 | ✅ [v0.1 data](results/raw/) |
+| Samsung Galaxy S26 Ultra (SM-S948N) | Snapdragon 8 Gen 3 (Adreno) | Android 16 | ✅ [data](results/raw/) |
+| Samsung SM-S947B | Exynos 2400 (Xclipse 940) | Android 16 | ✅ [data](results/raw/) |
+
+---
+
+## Write-up
+
+📝 **[What I learned measuring AI inference runtimes on a real Android phone](docs/blog/01-on-device-inference-benchmark.md)** — the methodology and the findings (why "GPU/INT8/runtime X is faster" all broke under measurement).
 
 ---
 
@@ -311,7 +353,7 @@ android-edge-ai-benchmark-lab/
   - [x] v0.5.1 — Android LiteRT inference: FP32 87.9 ms vs INT8 27.0 ms (INT8 3.3× faster on this heavy model)
   - [x] v0.5.2 — Android postprocess / NMS + sample visualization (Python↔Android parity: same detections, score Δ ≤ 0.006)
   - [x] v0.5.3 — Android 3-phase benchmark: INT8 inference 3.1× but end-to-end only 2.25× (quantize/dequant overhead in pre/post)
-- [ ] **v1.0** — Multi-device matrix, technical blog series
+- [x] **v1.0** — Multi-device matrix (Snapdragon 8 Gen 3 vs Exynos 2400: NNAPI flips per vendor; ExecuTorch-XNNPACK fastest on both) + technical [write-up](docs/blog/01-on-device-inference-benchmark.md)
 
 ---
 
