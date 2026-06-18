@@ -1,18 +1,74 @@
-# Android AI Benchmark — On-Device Inference Runtime Comparison
+# Edge AI Inference Benchmark Lab
 
-> **Does GPU always beat CPU? Does INT8 always beat FP32?**  
-> We measured it on a real device. The answers might surprise you.
+> **A measurement lab for edge AI inference trade-offs.**  
+> It tests how runtime, backend accelerator, and precision choices affect latency, memory, accuracy, and cold-start behavior on constrained edge devices.
 
-[![Android](https://img.shields.io/badge/Platform-Android%208.0+-green.svg)](https://developer.android.com)
+[![Edge AI](https://img.shields.io/badge/Focus-Edge%20AI%20Inference-orange.svg)](#what-this-project-is)
+[![Android Target](https://img.shields.io/badge/Target-Android%208.0+-green.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin-purple.svg)](https://kotlinlang.org)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Build](https://img.shields.io/github/actions/workflow/status/sangsoolee/android-edge-ai-benchmark-lab/build.yml?label=APK%20build)](https://github.com/sangsoolee/android-edge-ai-benchmark-lab/actions)
 
 ---
 
+This project is positioned as an **edge AI performance validation framework**, not just an Android demo app. It provides a reproducible path from model conversion to on-device runtime execution, raw evidence capture, cross-device analysis, and published benchmark conclusions.
+
 <p align="center">
   <img src="docs/hero_latency.svg" width="780" alt="MobileNetV3-Small p50 latency by runtime on Snapdragon 8 Gen 3 — ExecuTorch+XNNPACK fastest at 0.89 ms"/>
 </p>
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Convert["Model conversion"]
+        PT["PyTorch / Ultralytics models"]
+        TFL["TFLite / LiteRT"]
+        ONNX["ONNX"]
+        PTE["ExecuTorch .pte"]
+        PT --> TFL
+        PT --> ONNX
+        PT --> PTE
+    end
+
+    subgraph Device["Edge device benchmark harness"]
+        APP["Android app<br/>benchmark runner + telemetry capture"]
+        LRT["LiteRT<br/>CPU / GPU delegate"]
+        ORT["ONNX Runtime<br/>CPU / NNAPI"]
+        EXE["ExecuTorch<br/>portable / XNNPACK"]
+        DET["YOLOv8n detection<br/>preprocess / inference / postprocess"]
+        APP --> LRT
+        APP --> ORT
+        APP --> EXE
+        APP --> DET
+    end
+
+    subgraph Data["Measured outputs"]
+        CSV["Raw CSV rows<br/>p50 / p95 / p99 / cold start / PSS / thermal"]
+        JSON["Detection parity artifacts<br/>JSON + rendered image"]
+        ANALYZE["Python analysis scripts<br/>tables / plots / cross-device matrix"]
+    end
+
+    subgraph Report["Published evidence"]
+        README["README findings"]
+        BLOG["Blog-ready benchmark narrative"]
+        RAW["Committed raw results"]
+    end
+
+    TFL --> APP
+    ONNX --> APP
+    PTE --> APP
+    LRT --> CSV
+    ORT --> CSV
+    EXE --> CSV
+    DET --> CSV
+    DET --> JSON
+    CSV --> ANALYZE
+    JSON --> ANALYZE
+    ANALYZE --> README
+    ANALYZE --> BLOG
+    CSV --> RAW
+```
 
 ## TL;DR — what surprised me in 30 seconds
 
@@ -151,11 +207,13 @@ Same APK, same models, same protocol on two chips — **Galaxy S26 Ultra (Snapdr
 
 ## What This Project Is
 
-A **reproducible benchmarking pipeline** for comparing on-device AI inference runtimes on real Android hardware.
+An **edge AI inference benchmark lab** for validating performance trade-offs on constrained devices.
 
-Most "on-device AI" articles benchmark on a simulator, use a single average latency number, or don't disclose measurement conditions. This project measures **p50/p95/p99 latency, cold-start time, peak PSS memory, and thermal status**, documents the exact measurement protocol, and commits the raw result rows — every benchmark run, including repeat sessions — to [results/raw/](results/raw/). (Each row aggregates one 100-inference run; committing the full per-inference distributions is planned — see `docs`/roadmap.)
+The lab compares inference runtimes, backend accelerators, precision formats, and model families under a controlled measurement protocol. The goal is to answer engineering questions that matter before deployment: **Which runtime is fastest on this device? Does the accelerator actually help? Does INT8 improve latency without breaking accuracy? What is the cold-start and memory cost?**
 
-**Runtimes compared:**
+Most "on-device AI" articles benchmark on a simulator, use a single average latency number, or don't disclose measurement conditions. This project measures **p50/p95/p99 latency, cold-start time, peak PSS memory, thermal status, and accuracy/parity checks**, documents the exact protocol, and commits the raw result rows — every benchmark run, including repeat sessions — to [results/raw/](results/raw/). (Each row aggregates one 100-inference run; committing the full per-inference distributions is planned — see `docs`/roadmap.)
+
+**Current edge target and runtimes:**
 
 | Runtime | Status | Backends |
 |---|---|---|
