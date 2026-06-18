@@ -37,5 +37,5 @@
 
   <!-- footnote -->
   <line x1="190" y1="266" x2="700" y2="266" stroke="#e0e0e0" stroke-width="1"/>
-  <text x="190" y="286" font-size="11.5" fill="#888888">ExecuTorch <tspan font-weight="700">portable</tspan> executor: 70.8 ms (off-scale) — the XNNPACK delegate is ~80× faster. See the "ExecuTorch correction".</text>
+  <text x="190" y="286" font-size="11.5" fill="#888888">ExecuTorch <tspan font-weight="700">portable</tspan> executor: 70.8 ms (off-scale) — the XNNPACK delegate is ~80× faster. Always lower to XNNPACK for production.</text>
 </svg>

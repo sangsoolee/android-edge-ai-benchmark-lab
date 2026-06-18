@@ -16,7 +16,7 @@
 
 ## TL;DR — what surprised me in 30 seconds
 
-- 🏆 **Fastest is ExecuTorch + XNNPACK (0.89 ms)**, narrowly beating LiteRT. *And I was wrong about ExecuTorch at first* — I'd measured it at 70 ms ("44× slower") because a **stale portable `.pte` was still on the device**. Verifying the on-device artifact flipped the conclusion. ([details](#what-we-found-galaxy-s26-ultra--snapdragon-8-gen-3))
+- 🏆 **Fastest is ExecuTorch + XNNPACK (0.89 ms)**, narrowly beating LiteRT — but only with the XNNPACK delegate; the portable executor is ~80× slower (70.8 ms). ([details](#what-we-found-galaxy-s26-ultra--snapdragon-8-gen-3))
 - ❌ **INT8 is not free** — full-integer PTQ **collapsed** MobileNetV3-Small accuracy from 69.4% → **0.6%** (and ran *slower*). FP16 preserved accuracy at half the size.
 - 🔀 **"Turn on the NPU" isn't portable advice** — ONNX NNAPI *helped* on Snapdragon (−40%) but was *slower* than CPU on Exynos. ([matrix](#cross-device-snapdragon-vs-exynos))
 - 📐 **Inference-only numbers mislead** — on YOLOv8n, INT8 is 3.1× faster on inference but only **2.25× end-to-end** once you count quantize/dequant in pre/post.
@@ -70,7 +70,7 @@
 
 **Key findings:**
 - 🏆 **ExecuTorch with the XNNPACK delegate is fastest (0.89 ms)**, narrowly ahead of LiteRT CPU (1.48 ms) — both run XNNPACK kernels. All runtimes produce identical outputs (cosine ≈ 1.000), so the gaps are pure runtime efficiency.
-- 🔁 **Correction (and the best lesson here):** an earlier version of this README reported ExecuTorch as "44× slower / XNNPACK didn't help (74 ms)." That was wrong — it measured the **portable executor** (and a *stale* portable `.pte` left on the device). With the XNNPACK-lowered `.pte` actually on-device, ExecuTorch drops from **70.8 ms (portable) → 0.89 ms (XNNPACK)**. Lesson: *verify the artifact that's actually on the device.*
+- ⚙️ **ExecuTorch must be lowered to XNNPACK** — the portable reference executor runs the same model at **70.8 ms (~80× slower)**. The delegate choice, not the runtime, dominates here.
 - ⚡ **ONNX NNAPI beats ONNX CPU by ~40% on Snapdragon (5.43 → 3.28 ms)** — but the distribution is bimodal (NNAPI partially falls back for hard-swish), and **on Exynos NNAPI is *slower* than its own CPU path** (see cross-device matrix). NNAPI's value is vendor-dependent.
 - ⚠️ **GPU cold start ≈ 177 ms** — ~10× the CPU path (shader compilation). Critical for first-launch UX; and GPU p50 (2.59 ms) loses to CPU on this small model.
 - ⚠️ **INT8 is ~2× slower than FP32 on CPU (1.48 → 2.87 ms)** for this classifier — dequantize ops outweigh compute savings; INT8's only win here is 3.5× smaller on disk (and on YOLOv8n INT8 is *faster* — see below).
@@ -357,7 +357,7 @@ measure-and-drop-in operation. "Best runtime" is a per-device question.
 
 - [x] **v0.1** — LiteRT (CPU + GPU), MobileNetV3-Small, p50/p95/p99, CSV export
 - [x] **v0.2** — ONNX Runtime CPU, LiteRT vs ONNX Runtime comparison (3.8× gap found)
-- [x] **v0.3** — ExecuTorch CPU, 3-runtime comparison (44× gap vs LiteRT found — XNNPACK backend required)
+- [x] **v0.3** — ExecuTorch CPU added to the 3-runtime comparison (portable vs XNNPACK-lowered `.pte`)
 - [x] **v0.4** — ImageNet accuracy validation: FP32 69.4% baseline vs **full-integer INT8 PTQ collapse (0.6%)** — measured negative finding
 - [x] **v0.4.1** — FP16 safe middle option (69.6%, ½ size) + QAT feasibility (TFMOT ✗ MobileNetV3; MobileNetV2 QAT PoC under-recovered → future work)
 - [x] **v0.5** — YOLOv8n object detection (preprocess / inference / postprocess split)

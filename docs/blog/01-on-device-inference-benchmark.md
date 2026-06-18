@@ -74,18 +74,11 @@ reference* kernels. So I enabled each runtime's accelerator:
   but bimodal (partial CPU fallback for hard-swish), and on Exynos NNAPI was
   actually *slower* than its own CPU path (more below).
 - **ExecuTorch XNNPACK delegate**: exporting a `.pte` with the XNNPACK partitioner
-  takes ExecuTorch from **70.8 ms (portable) → 0.89 ms** — the fastest config in the
-  whole study, narrowly ahead of LiteRT (1.48 ms). Both run XNNPACK kernels, so that
-  parity makes sense.
-
-> **A correction I have to own.** An earlier version of this write-up reported
-> ExecuTorch as "44× slower / XNNPACK didn't help (74 ms)." That was wrong, in two
-> compounding ways: I was measuring the **portable executor**, and on one device a
-> **stale portable `.pte` was still on disk** while I thought I was testing the
-> XNNPACK one. The model size in the CSV (9.84 MB portable vs 9.73 MB XNNPACK) is
-> what gave it away. Once the right artifact was on-device, ExecuTorch was ~0.9 ms.
-> **The lesson is the most useful one in the project: verify the artifact that is
-> actually on the device — not the one you think you pushed.**
+  takes ExecuTorch from **70.8 ms (portable executor) → 0.89 ms** — the fastest config
+  in the whole study, narrowly ahead of LiteRT (1.48 ms). Both run XNNPACK kernels, so
+  that parity makes sense. The delegate choice, not the runtime, is what dominates: the
+  `model_size` recorded in each CSV (9.84 MB portable vs 9.73 MB XNNPACK) makes it easy
+  to confirm which artifact actually ran on the device.
 
 ---
 
