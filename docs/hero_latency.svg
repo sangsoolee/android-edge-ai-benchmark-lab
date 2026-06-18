@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect x="0" y="0" width="760" height="300" rx="10" fill="#ffffff"/>
+
+  <text x="24" y="30" font-size="18" font-weight="700" fill="#1a1a1a">MobileNetV3-Small — median p50 latency (Snapdragon 8 Gen 3)</text>
+  <text x="24" y="50" font-size="12.5" fill="#666666">Lower is better · same model, outputs verified identical across runtimes (cosine ≈ 1.000)</text>
+
+  <!-- bars -->
+  <!-- ExecuTorch XNNPACK 0.89 -->
+  <text x="180" y="79" font-size="12.5" text-anchor="end" fill="#1a1a1a">ExecuTorch · XNNPACK</text>
+  <rect x="190" y="64" width="76" height="22" rx="3" fill="#EE4B2B"/>
+  <text x="272" y="79" font-size="12.5" font-weight="700" fill="#1a1a1a">0.89 ms  🏆</text>
+
+  <!-- LiteRT CPU FP32 1.48 -->
+  <text x="180" y="112" font-size="12.5" text-anchor="end" fill="#1a1a1a">LiteRT · CPU FP32</text>
+  <rect x="190" y="97" width="126" height="22" rx="3" fill="#4285F4"/>
+  <text x="322" y="112" font-size="12.5" fill="#444444">1.48 ms</text>
+
+  <!-- LiteRT GPU FP32 2.59 -->
+  <text x="180" y="145" font-size="12.5" text-anchor="end" fill="#1a1a1a">LiteRT · GPU FP32</text>
+  <rect x="190" y="130" width="220" height="22" rx="3" fill="#4285F4"/>
+  <text x="416" y="145" font-size="12.5" fill="#444444">2.59 ms  ·  cold start 177 ms</text>
+
+  <!-- LiteRT CPU INT8 2.87 -->
+  <text x="180" y="178" font-size="12.5" text-anchor="end" fill="#1a1a1a">LiteRT · CPU INT8</text>
+  <rect x="190" y="163" width="244" height="22" rx="3" fill="#4285F4"/>
+  <text x="440" y="178" font-size="12.5" fill="#444444">2.87 ms  ·  accuracy collapsed (0.6%)</text>
+
+  <!-- ONNX NNAPI 3.28 -->
+  <text x="180" y="211" font-size="12.5" text-anchor="end" fill="#1a1a1a">ONNX · NNAPI</text>
+  <rect x="190" y="196" width="279" height="22" rx="3" fill="#00A4EF"/>
+  <text x="475" y="211" font-size="12.5" fill="#444444">3.28 ms</text>
+
+  <!-- ONNX CPU 5.43 -->
+  <text x="180" y="244" font-size="12.5" text-anchor="end" fill="#1a1a1a">ONNX · CPU</text>
+  <rect x="190" y="229" width="462" height="22" rx="3" fill="#00A4EF"/>
+  <text x="658" y="244" font-size="12.5" fill="#444444">5.43 ms</text>
+
+  <!-- footnote -->
+  <line x1="190" y1="266" x2="700" y2="266" stroke="#e0e0e0" stroke-width="1"/>
+  <text x="190" y="286" font-size="11.5" fill="#888888">ExecuTorch <tspan font-weight="700">portable</tspan> executor: 70.8 ms (off-scale) — the XNNPACK delegate is ~80× faster. See the "ExecuTorch correction".</text>
+</svg>

@@ -11,7 +11,19 @@
 ---
 
 <p align="center">
-  <img src="docs/screenshot_v02.png" width="320" alt="Benchmark results on Galaxy S26 Ultra"/>
+  <img src="docs/hero_latency.svg" width="780" alt="MobileNetV3-Small p50 latency by runtime on Snapdragon 8 Gen 3 — ExecuTorch+XNNPACK fastest at 0.89 ms"/>
+</p>
+
+## TL;DR — what surprised me in 30 seconds
+
+- 🏆 **Fastest is ExecuTorch + XNNPACK (0.89 ms)**, narrowly beating LiteRT. *And I was wrong about ExecuTorch at first* — I'd measured it at 70 ms ("44× slower") because a **stale portable `.pte` was still on the device**. Verifying the on-device artifact flipped the conclusion. ([details](#what-we-found-galaxy-s26-ultra--snapdragon-8-gen-3))
+- ❌ **INT8 is not free** — full-integer PTQ **collapsed** MobileNetV3-Small accuracy from 69.4% → **0.6%** (and ran *slower*). FP16 preserved accuracy at half the size.
+- 🔀 **"Turn on the NPU" isn't portable advice** — ONNX NNAPI *helped* on Snapdragon (−40%) but was *slower* than CPU on Exynos. ([matrix](#cross-device-snapdragon-vs-exynos))
+- 📐 **Inference-only numbers mislead** — on YOLOv8n, INT8 is 3.1× faster on inference but only **2.25× end-to-end** once you count quantize/dequant in pre/post.
+- ✅ **Reproducible** — release builds, p50/p95/p99, raw CSVs committed, outputs verified identical across runtimes (cosine ≈ 1.000).
+
+<p align="center">
+  <img src="docs/screenshot_v02.png" width="220" alt="Benchmark app on Galaxy S26 Ultra"/>
 </p>
 
 ---
